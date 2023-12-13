@@ -2,7 +2,7 @@
 
 ## Overview
 
-This project implements two algorithms for solving the Two Constraint Knapsack problem, a classic optimization problem in computer science. The Two Constraint Knapsack problem involves selecting a subset of items, each with a weight and two constraints, to maximize the total profit while adhering to the weight and constraint limitations.
+This project implements four algorithms for solving the Two Constraint Knapsack problem, a classic optimization problem in computer science. The Two Constraint Knapsack problem involves selecting a subset of items, each with a weight and two constraints, to maximize the total profit while adhering to the weight and constraint limitations. This project compares algorithms in terms of their time efficiency (for exact algorithms) and proximity to the optimal solution (for approximate algorithms).
 
 The implemented algorithms are as follows:
 

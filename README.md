@@ -20,6 +20,20 @@ The implemented algorithms are as follows:
 - `include/`: Contains header files.
 - `src/`: Contains implementation files.
 
+## Project dependencies
+Before running make sure you have all required dependencies.
+```bash
+python >= 3.0
+minizinc python <= 0.6.0
+minizinc - lastest
+```
+To install them paste following lines in terminal
+```bash
+apt install python3
+apt install minizinc
+pip install minizinc==0.5.0
+```
+
 ## Getting Started
 
 To get started, clone the repository to your local machine:

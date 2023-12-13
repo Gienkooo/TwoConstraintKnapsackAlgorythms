@@ -1,5 +1,5 @@
 /.vscode
 /Minizinc tree demo.mzn
 /Minizinc tree demo.ozn
-/build
+/build/*
 /inputData

@@ -15,4 +15,4 @@ var int: totalValue = sum(i in ITEMS)(x[i] * values[i]);
 
 solve maximize totalValue;
 
-output ["Total value: \(totalValue)\n"];
+output [totalValue"];

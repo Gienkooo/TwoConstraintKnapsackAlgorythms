@@ -2,4 +2,6 @@
 /Minizinc tree demo.mzn
 /Minizinc tree demo.ozn
 /build/*
+!/build/MinizincDriver.py
+!/build/*.mzn
 /inputData

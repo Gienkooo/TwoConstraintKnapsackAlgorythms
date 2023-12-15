@@ -5,9 +5,10 @@ namespace po = boost::program_options;
 //compile command: g++ testgen.cpp -o testgen -lboost_program_options
 
 int main(int argc, char* argv[]){
-    int maxnumber = MAX_ITEMS;
     int maxweight = MAX_WEIGHT;
+    int minweight = 1;
     int maxsize = MAX_SIZE;
+    int minsize = 1;
     int maxvalue = MAX_VALUE;
     int numitems = 10;
     int seedrand = 1;
@@ -16,12 +17,13 @@ int main(int argc, char* argv[]){
         po::options_description desc("Allowed options");
         desc.add_options()
             ("help,h", "Produce help message")
-            ("maxnumber,n", po::value<int>(), "Maximal number of items.")
             ("maxweight,w", po::value<int>(), "Maximal weight capacity.")
-            ("maxsize,s", po::value<int>(), "Maximal size capacity")
-            ("maxvalue,v", po::value<int>(), "Maximal value")
-            ("numitems", po::value<int>(), "Number of tests")
-            ("seedrand", po::value<int>(), "");
+            ("minweight,w", po::value<int>(), "Minimal weight of a single item.")
+            ("maxsize,s", po::value<int>(), "Maximal size capacity.")
+            ("minsize,s", po::value<int>(), "Minimal size of a single item.")
+            ("maxvalue,v", po::value<int>(), "Maximal value.")
+            ("numitems", po::value<int>(), "Number of items.")
+            ("seedrand", po::value<int>(), "Option to externally seed the random device in order to enable test reproducibility.");
         
         po::variables_map vm;
         po::store(po::parse_command_line(argc, argv, desc), vm);
@@ -32,16 +34,20 @@ int main(int argc, char* argv[]){
             return 0;
         }
 
-        if (vm.count("maxnumber")) {
-            maxnumber = vm["maxnumber"].as<int>();
-        }
-
         if (vm.count("maxweight")) {
             maxweight = vm["maxweight"].as<int>();
         }
 
+        if (vm.count("minweight")) {
+            minweight = vm["minweight"].as<int>();
+        }
+
         if (vm.count("maxsize")) {
             maxsize = vm["maxsize"].as<int>();
+        }
+
+        if (vm.count("minsize")) {
+            minsize = vm["minsize"].as<int>();
         }
 
         if(vm.count("numitems")){
@@ -56,13 +62,18 @@ int main(int argc, char* argv[]){
         return 1;
     }
 
+    if(minsize > maxsize || minweight > maxweight){
+        std::cerr << "Error. Invalid set of parameters.\n";
+        exit(1);
+    }
+
     srand(seedrand);
     std::vector<int> values, weights, sizes;
 
     for(int i = 0; i < numitems; ++i){
         values.push_back(rand() % maxvalue + 1);
-        weights.push_back(rand() % maxweight + 1);
-        sizes.push_back(rand() % maxsize + 1);
+        weights.push_back(rand() % (maxweight - minweight + 1) + minweight);
+        sizes.push_back(rand() % (maxsize - minsize + 1) + minsize);
     }
 
     json data;

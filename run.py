@@ -43,11 +43,16 @@ def perform():
     dynamicTimes = []
     dynamicScores = []
     bruteTimes = []
+    bruteParTimes = []
     minizincTimes = []
     geneticTimes = []
     geneticScores = []
+    geneticParTimes = []
+    geneticParScores = []
     greedyTimes = []
     greedyScores = []
+    greedyParTimes = []
+    greedyParScores = []
     i = 1
     j = 2
     while j < max_range:
@@ -83,16 +88,23 @@ def perform():
       bruteScore, bruteTime = testAlgo('./build/bruteKnapsack', test)
       bruteTimes.append(bruteTime)
 
+      bruteParScore, bruteParTime = testAlgo('./build/bruteKnapsackPar', test)
+      bruteParTimes.append(bruteParTime)
+
       dynamicScore, dynamicTime = testAlgo('./build/dynamicKnapsack', test)
       dynamicTimes.append(dynamicTime)
       dynamicScores.append(dynamicScore)
 
-      minizincScore, minizincTime = testAlgo(['python3', 'build/MinizincDriver.py'], test)
-      minizincTimes.append(minizincTime)
+      # minizincScore, minizincTime = testAlgo(['python3', 'build/MinizincDriver.py'], test)
+      # minizincTimes.append(minizincTime)
 
       greedyScore, greedyTime = testAlgo('./build/greedyKnapsack', test)
       greedyScores.append(greedyScore)
       greedyTimes.append(greedyTime)
+
+      greedyParScore, greedyParTime = testAlgo('./build/greedyKnapsackPar', test)
+      greedyParScores.append(greedyParScore)
+      greedyParTimes.append(greedyParTime)
 
       geneticScore, geneticTime = testAlgo('./build/geneticKnapsack', test)
       geneticScores.append(geneticScore)

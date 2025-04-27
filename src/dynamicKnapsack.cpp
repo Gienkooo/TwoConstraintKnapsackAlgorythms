@@ -2,7 +2,6 @@
 
 using namespace std;
 
-
 int main(){
     int n, maxW, maxS;
     vector<int> weights, sizes, values;

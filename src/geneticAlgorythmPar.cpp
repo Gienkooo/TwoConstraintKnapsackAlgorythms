@@ -1,5 +1,13 @@
 #include "geneticAlgorythm.h"
 
+/*
+- zamienić rand na rand_r i ogarnąć seeda
+- zrównoleglić generowanie nowej populacji
+- zrównoleglić mutację populacji
+- zrównoleglić sprawdzanie jakości rozwiązań populacji
+- zrównoleglić sortowanie populacji ????
+*/
+
 int Genetic::Perform(int numberOfGenerations) {
   double crossoverRate = this->crossoverRate;
   double crossoverRateDecay = this->crossoverRateDecay;
@@ -35,7 +43,7 @@ void Genetic::mutate(std::vector<int> &v) {
   int limit = v.size();
   std::vector<int> temp = v;
   do {
-    int idx = rand() % v.size();
+    int idx = std::rand_r(&thread_seed) % v.size();
     temp[idx] = 1 - temp[idx];
   } while (--limit && !problem->isValidSolution(temp));
   if (limit) v = temp;
@@ -47,7 +55,8 @@ std::vector<int> Genetic::crossover(std::vector<int> &v1,
   int limit = v1.size();
   do {
     for (int i = 0; i < v1.size(); ++i) {
-      if ((double)rand() / (double)RAND_MAX <= crossoverRate) {
+      if ((double)std::rand_r(&thread_seed) / (double)RAND_MAX <=
+          crossoverRate) {
         child[i] = v1[i];
       } else {
         child[i] = v2[i];

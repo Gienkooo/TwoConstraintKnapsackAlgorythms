@@ -1,6 +1,11 @@
 #pragma once
 
 #include <bits/stdc++.h>
+#include <omp.h>
+#include <stdlib.h>
+
+#include <cstdio>
+#include <cstdlib>
 #include <nlohmann/json.hpp>
 #include <random>
 

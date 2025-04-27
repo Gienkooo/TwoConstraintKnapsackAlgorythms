@@ -2,10 +2,12 @@
 
 using namespace std;
 
-int bruteKnapsack(int n, int maxW, int maxS, vector<int> weights,
-                  vector<int> sizes, vector<int> values, int rangeBegin,
-                  int rangeEnd) {
+int bruteKnapsackPar(int n, int maxW, int maxS, vector<int> weights,
+                     vector<int> sizes, vector<int> values, int rangeBegin,
+                     int rangeEnd) {
   int m = INT_MIN;
+
+#pragma omp parallel for reduction(max : m) schedule(static)
   for (int i = rangeBegin; i < rangeEnd; ++i) {
     int ws = 0, ss = 0, vs = 0;
     for (int j = 0; j < n; ++j) {
@@ -22,13 +24,6 @@ int bruteKnapsack(int n, int maxW, int maxS, vector<int> weights,
   return m;
 }
 
-void display(vector<int> v) {
-  for (auto e : v) {
-    cout << e << " ";
-  }
-  cout << endl;
-}
-
 int main() {
   int n, maxW, maxS;
   vector<int> weights, sizes, values;
@@ -41,8 +36,8 @@ int main() {
   sizes = data["sizes"].get<vector<int>>();
   values = data["values"].get<vector<int>>();
 
-  cout << bruteKnapsack(n, maxW, maxS, weights, sizes, values, 0,
-                        pow(2.00, (double)n))
+  cout << bruteKnapsackPar(n, maxW, maxS, weights, sizes, values, 0,
+                           pow(2.00, (double)n))
        << endl;
 
   return 0;

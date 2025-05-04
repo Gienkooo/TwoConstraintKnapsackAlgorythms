@@ -1,12 +1,15 @@
 #pragma once
 
-#include <bits/stdc++.h>
+#include <iostream>
+#include <vector>
+#include <numeric>
 #include <omp.h>
 #include <stdlib.h>
 
 #include <cstdio>
 #include <cstdlib>
 #include <nlohmann/json.hpp>
+#include <boost/program_options.hpp>
 #include <random>
 
 using json = nlohmann::json;

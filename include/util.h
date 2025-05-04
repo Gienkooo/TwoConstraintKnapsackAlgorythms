@@ -1,3 +1,6 @@
+#pragma once
+
 #include <limitheaders.h>
 
-void display(vector<int> v);
+void display(std::vector<int> v);
+std::mt19937 &get_random_engine();

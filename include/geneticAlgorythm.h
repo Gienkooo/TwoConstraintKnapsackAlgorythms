@@ -1,10 +1,13 @@
 #include "limitheaders.h"
 #include "problem.h"
+#include <vector>
 
-class Genetic {
- public:
+class Genetic
+{
+public:
   Genetic(int populationSize, double crossoverRate, double mutationRate,
-          Problem *problem, double crossoverRateDecay = 1.0) {
+          Problem *problem, double crossoverRateDecay = 1.0)
+  {
     this->populationSize = populationSize;
     this->crossoverRate = crossoverRate;
     this->mutationRate = mutationRate;
@@ -14,7 +17,7 @@ class Genetic {
 
   int Perform(int numberOfGenerations);
 
- public:
+public:
   double crossoverRate = 0.8;
   double mutationRate = 0.15;
   int populationSize = 25;
@@ -33,4 +36,7 @@ class Genetic {
 
   void displayPopulation(std::vector<std::vector<int>> population,
                          int generationNo);
+
+private:
+  const std::vector<int> &tournamentSelection(const std::vector<std::vector<int>> &population);
 };

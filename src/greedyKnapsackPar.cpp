@@ -1,65 +1,124 @@
 #include "limitheaders.h"
+#include <vector>
+#include <chrono>
+#include <iostream>
+#include <algorithm>
+#include <omp.h>
+#include <numeric>
+#include <nlohmann/json.hpp>
+#include <iterator>
 
+using json = nlohmann::json;
 using namespace std;
 
-double calculateRatio(vector<vector<int>>& tab, int idx){
-    return (double) tab[0][idx] / (double)(tab[1][idx] + tab[2][idx]);
+struct Item
+{
+    int id;
+    int weight;
+    int size;
+    int value;
+    double ratio;
+};
+
+bool compareItems(const Item &a, const Item &b)
+{
+    double ratio_a = (a.weight + a.size > 0) ? (double)a.value / (a.weight + a.size) : 0.0;
+    double ratio_b = (b.weight + b.size > 0) ? (double)b.value / (b.weight + b.size) : 0.0;
+    return ratio_a > ratio_b;
 }
 
-void quick_sort(vector<vector<int>>& tab, int left, int right){
-    if(left >= right) return;
+const size_t PARALLEL_SORT_THRESHOLD = 128;
 
-    int i = left - 1, j = right + 1;
-    double pivot = calculateRatio(tab, (left + right) / 2);
-
-    while(true){
-        while(i < right && pivot < calculateRatio(tab, ++i));
-        while(j >= left && pivot > calculateRatio(tab, --j));
-
-        if(i <= j){
-            swap(tab[0][i], tab[0][j]);
-            swap(tab[1][i], tab[1][j]);
-            swap(tab[2][i], tab[2][j]);
-        }
-        else{
-            break;
-        }
-    }
-    if(j > left){
-        #pragma omp task shared(arr)
-        quick_sort(tab, left, j);
-    }
-    if(i < right){
-        #pragma omp task shared(arr)
-        quick_sort(tab, i, right);
-    }
-}
-
-int greedyKnapsack(int n, int maxW, int maxS, vector<int> weights, vector<int> sizes, vector<int> values){
-    vector<vector<int>> v = {values, weights, sizes};
-    int m = 0, idx = 0;
-
-    #pragma omp parallel
+template <typename RandomIt, typename Compare>
+void parallelMergeSortRecursive(RandomIt first, RandomIt last, Compare comp)
+{
+    auto const size = std::distance(first, last);
+    if (size <= PARALLEL_SORT_THRESHOLD)
     {
-        #pragma omp single
-        quick_sort(v, 0, n);
+        std::sort(first, last, comp);
+        return;
     }
-    while(idx < n){
-        if(maxW >= v[1][idx] && maxS >= v[2][idx]){
-            m += v[0][idx];
-            maxW -= v[1][idx];
-            maxS -= v[2][idx];
-        }
-        ++idx;
-    }
-    return m;
+
+    auto mid = first + size / 2;
+
+#pragma omp task default(none) shared(first, mid, comp)
+    parallelMergeSortRecursive(first, mid, comp);
+
+#pragma omp task default(none) shared(mid, last, comp)
+    parallelMergeSortRecursive(mid, last, comp);
+
+#pragma omp taskwait
+    std::inplace_merge(first, mid, last, comp);
 }
 
+template <typename RandomIt, typename Compare>
+void parallelMergeSort(RandomIt first, RandomIt last, Compare comp)
+{
+    if (first == last)
+        return;
 
-int main(){
+#pragma omp parallel default(none) shared(first, last, comp)
+    {
+
+#pragma omp single nowait
+        parallelMergeSortRecursive(first, last, comp);
+    }
+}
+
+int greedyKnapsackPar(int n, int maxW, int maxS, const vector<int> &weights, const vector<int> &sizes, const vector<int> &values)
+{
+    vector<Item> items(n);
+#pragma omp parallel for
+    for (int i = 0; i < n; ++i)
+    {
+        items[i] = {i, weights[i], sizes[i], values[i], 0.0};
+        double weight_plus_size = static_cast<double>(items[i].weight) + items[i].size;
+        items[i].ratio = (weight_plus_size > 0) ? static_cast<double>(items[i].value) / weight_plus_size : 0.0;
+    }
+
+    parallelMergeSort(items.begin(), items.end(), compareItems);
+
+    int currentW = 0;
+    int currentS = 0;
+    int totalValue = 0;
+
+    vector<int> solution(n, 0);
+
+    for (const auto &item : items)
+    {
+        if (currentW + item.weight <= maxW && currentS + item.size <= maxS)
+        {
+            currentW += item.weight;
+            currentS += item.size;
+            totalValue += item.value;
+            solution[item.id] = 1;
+        }
+    }
+
+    return totalValue;
+}
+
+int main()
+{
+    omp_set_schedule(omp_sched_static, 10000);
+
+    json data = json::parse(std::cin);
+    if (data.contains("num_threads"))
+    {
+        int num_threads = data["num_threads"].get<int>();
+        if (num_threads > 0)
+        {
+            omp_set_num_threads(num_threads);
+        }
+    }
+    else
+    {
+        int max_threads = omp_get_max_threads();
+        omp_set_num_threads(max_threads);
+    }
+
     int n, maxW, maxS;
     vector<int> weights, sizes, values;
-    json data = json::parse(std::cin);
 
     n = data["n"];
     maxW = data["maxweight"];
@@ -68,7 +127,15 @@ int main(){
     sizes = data["sizes"].get<vector<int>>();
     values = data["values"].get<vector<int>>();
 
-    cout << greedyKnapsack(n, maxW, maxS, weights, sizes, values) << endl;
+    auto start_time = std::chrono::high_resolution_clock::now();
+
+    int result = greedyKnapsackPar(n, maxW, maxS, weights, sizes, values);
+
+    auto end_time = std::chrono::high_resolution_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time);
+
+    cout << result << endl;
+    cerr << "Time: " << duration.count() / 1000.0 << " ms" << endl;
 
     return 0;
 }

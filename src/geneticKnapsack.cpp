@@ -47,7 +47,7 @@ int main()
     auto end_time = std::chrono::high_resolution_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::microseconds>(end_time - start_time);
 
-    std::cout << result << std::endl;
+    std::cout << "{\"value\": " << result << "}" << std::endl;
     cerr << "Time: " << duration.count() / 1000.0 << " ms" << endl;
 
     return 0;

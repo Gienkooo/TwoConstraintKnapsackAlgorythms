@@ -60,7 +60,7 @@ add_executable(greedyKnapsackCuda src/greedyKnapsackCuda.cu ${UTIL_SOURCES})
 link_common_libraries(greedyKnapsackCuda)
 target_link_libraries(greedyKnapsackCuda PRIVATE CUDA::cudart)
 
-add_executable(geneticKnapsackCuda src/geneticKnapsack.cpp src/geneticAlgorythmCuda.cu ${KNAPSACK_PROBLEM_SOURCES} ${UTIL_SOURCES})
+add_executable(geneticKnapsackCuda src/geneticAlgorythmCuda.cu ${KNAPSACK_PROBLEM_SOURCES} ${UTIL_SOURCES})
 link_common_libraries(geneticKnapsackCuda)
 target_link_libraries(geneticKnapsackCuda PRIVATE CUDA::cudart)
 

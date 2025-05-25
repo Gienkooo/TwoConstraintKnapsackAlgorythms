@@ -4,23 +4,27 @@
 #include <algorithm>
 #include <climits>
 #include <iostream>
+#include <nlohmann/json.hpp>
 #include <vector>
 
 __global__ void dynamicKnapsackItemKernel(int maxW, int maxS,
-                                          const int* d_dp_prev, int* d_dp_curr,
+                                          const int *d_dp_prev, int *d_dp_curr,
                                           int item_weight, int item_size,
-                                          int item_value) {
+                                          int item_value)
+{
   int w = blockIdx.x * blockDim.x + threadIdx.x;
   int s = blockIdx.y * blockDim.y + threadIdx.y;
 
-  if (w > maxW || s > maxS) {
+  if (w > maxW || s > maxS)
+  {
     return;
   }
 
   int prev_idx = w * (maxS + 1) + s;
   d_dp_curr[prev_idx] = d_dp_prev[prev_idx];
 
-  if (w >= item_weight && s >= item_size) {
+  if (w >= item_weight && s >= item_size)
+  {
     int prev_take_idx = (w - item_weight) * (maxS + 1) + (s - item_size);
     d_dp_curr[prev_idx] =
         max(d_dp_curr[prev_idx], d_dp_prev[prev_take_idx] + item_value);
@@ -28,8 +32,9 @@ __global__ void dynamicKnapsackItemKernel(int maxW, int maxS,
 }
 
 extern "C" int runDynamicKnapsackCuda(int n, int maxW, int maxS,
-                                      const int* h_weights, const int* h_sizes,
-                                      const int* h_values) {
+                                      const int *h_weights, const int *h_sizes,
+                                      const int *h_values)
+{
   cudaEvent_t startEvent, stopEvent;
   cudaEventCreate(&startEvent);
   cudaEventCreate(&stopEvent);
@@ -37,16 +42,16 @@ extern "C" int runDynamicKnapsackCuda(int n, int maxW, int maxS,
 
   size_t dp_table_size_bytes = (size_t)(maxW + 1) * (maxS + 1) * sizeof(int);
 
-  int* d_dp_prev;
-  int* d_dp_curr;
+  int *d_dp_prev;
+  int *d_dp_curr;
   cudaMalloc(&d_dp_prev, dp_table_size_bytes);
   cudaMalloc(&d_dp_curr, dp_table_size_bytes);
 
   cudaMemset(d_dp_prev, 0, dp_table_size_bytes);
 
-  int* d_weights;
-  int* d_sizes;
-  int* d_values;
+  int *d_weights;
+  int *d_sizes;
+  int *d_values;
   cudaMalloc(&d_weights, n * sizeof(int));
   cudaMalloc(&d_sizes, n * sizeof(int));
   cudaMalloc(&d_values, n * sizeof(int));
@@ -58,12 +63,14 @@ extern "C" int runDynamicKnapsackCuda(int n, int maxW, int maxS,
   dim3 numBlocks((maxW + 1 + threadsPerBlock.x - 1) / threadsPerBlock.x,
                  (maxS + 1 + threadsPerBlock.y - 1) / threadsPerBlock.y);
 
-  for (int i = 0; i < n; ++i) {
+  for (int i = 0; i < n; ++i)
+  {
     dynamicKnapsackItemKernel<<<numBlocks, threadsPerBlock>>>(
         maxW, maxS, d_dp_prev, d_dp_curr, h_weights[i], h_sizes[i],
         h_values[i]);
     cudaError_t err = cudaGetLastError();
-    if (err != cudaSuccess) {
+    if (err != cudaSuccess)
+    {
       std::cerr << "CUDA error after kernel launch for item " << i << ": "
                 << cudaGetErrorString(err) << std::endl;
 
@@ -78,7 +85,7 @@ extern "C" int runDynamicKnapsackCuda(int n, int maxW, int maxS,
     }
     cudaDeviceSynchronize();
 
-    int* temp = d_dp_prev;
+    int *temp = d_dp_prev;
     d_dp_prev = d_dp_curr;
     d_dp_curr = temp;
   }
@@ -101,12 +108,13 @@ extern "C" int runDynamicKnapsackCuda(int n, int maxW, int maxS,
   cudaEventDestroy(startEvent);
   cudaEventDestroy(stopEvent);
 
-  std::cout << "{\\" value\\": " << result << "}" << std::endl;
+  std::cout << "{\"value\": " << result << "}" << std::endl;
   std::cerr << "CUDA Time: " << elapsedMs << " ms" << std::endl;
   return result;
 }
 
-int main() {
+int main()
+{
   nlohmann::json data;
   std::cin >> data;
 

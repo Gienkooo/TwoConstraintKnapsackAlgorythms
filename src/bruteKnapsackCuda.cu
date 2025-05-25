@@ -2,6 +2,7 @@
 #include <device_launch_parameters.h>
 #include <thrust/device_vector.h>
 #include <thrust/host_vector.h>
+#include <nlohmann/json.hpp>
 
 #include <algorithm>
 #include <climits>
@@ -9,49 +10,58 @@
 #include <vector>
 
 __global__ void bruteKnapsackKernel(int n, int maxW, int maxS,
-                                    const int* weights, const int* sizes,
-                                    const int* values, long long start,
-                                    long long end, int* d_maxValue) {
+                                    const int *weights, const int *sizes,
+                                    const int *values, long long start,
+                                    long long end, int *d_maxValue)
+{
   extern __shared__ int sdata[];
   int tid = threadIdx.x;
   long long idx = blockIdx.x * blockDim.x + threadIdx.x + start;
   int localMax = 0;
-  if (idx < end) {
+  if (idx < end)
+  {
     int ws = 0, ss = 0, vs = 0;
-    for (int j = 0; j < n; ++j) {
-      if ((idx >> j) & 1) {
+    for (int j = 0; j < n; ++j)
+    {
+      if ((idx >> j) & 1)
+      {
         vs += values[j];
         ws += weights[j];
         ss += sizes[j];
       }
     }
-    if (ws <= maxW && ss <= maxS) {
+    if (ws <= maxW && ss <= maxS)
+    {
       localMax = vs;
     }
   }
   sdata[tid] = localMax;
   __syncthreads();
 
-  for (int s = blockDim.x / 2; s > 0; s >>= 1) {
-    if (tid < s) {
+  for (int s = blockDim.x / 2; s > 0; s >>= 1)
+  {
+    if (tid < s)
+    {
       sdata[tid] = max(sdata[tid], sdata[tid + s]);
     }
     __syncthreads();
   }
-  if (tid == 0) {
+  if (tid == 0)
+  {
     atomicMax(d_maxValue, sdata[0]);
   }
 }
 
 int bruteKnapsackCuda(int n, int maxW, int maxS,
-                      const std::vector<int>& weights,
-                      const std::vector<int>& sizes,
-                      const std::vector<int>& values, long long start,
-                      long long end, float& elapsedMs) {
-  int* d_weights;
-  int* d_sizes;
-  int* d_values;
-  int* d_maxValue;
+                      const std::vector<int> &weights,
+                      const std::vector<int> &sizes,
+                      const std::vector<int> &values, long long start,
+                      long long end, float &elapsedMs)
+{
+  int *d_weights;
+  int *d_sizes;
+  int *d_values;
+  int *d_maxValue;
   size_t arrSize = n * sizeof(int);
   cudaMalloc(&d_weights, arrSize);
   cudaMalloc(&d_sizes, arrSize);
@@ -89,15 +99,34 @@ int bruteKnapsackCuda(int n, int maxW, int maxS,
 }
 
 extern "C" int runBruteKnapsackCuda(int n, int maxW, int maxS,
-                                    const int* weights, const int* sizes,
-                                    const int* values, long long start,
-                                    long long end) {
+                                    const int *weights, const int *sizes,
+                                    const int *values, long long start,
+                                    long long end)
+{
   std::vector<int> w(weights, weights + n);
   std::vector<int> s(sizes, sizes + n);
   std::vector<int> v(values, values + n);
   float elapsedMs = 0.0f;
   int result = bruteKnapsackCuda(n, maxW, maxS, w, s, v, start, end, elapsedMs);
-  std::cout << "{\\" value\\": " << result << "}" << std::endl;
+  std::cout << "{\"value\": " << result << "}" << std::endl;
   std::cerr << "CUDA Time: " << elapsedMs << " ms" << std::endl;
   return result;
+}
+
+int main()
+{
+  nlohmann::json data;
+  std::cin >> data;
+  int n = data["n"];
+  int maxW = data["maxweight"];
+  int maxS = data["maxsize"];
+  std::vector<int> weights = data["weights"].get<std::vector<int>>();
+  std::vector<int> sizes = data["sizes"].get<std::vector<int>>();
+  std::vector<int> values = data["values"].get<std::vector<int>>();
+  long long num_combinations = 1LL << n;
+  float elapsedMs = 0.0f;
+  int result = bruteKnapsackCuda(n, maxW, maxS, weights, sizes, values, 0, num_combinations, elapsedMs);
+  std::cout << "{\"value\": " << result << "}" << std::endl;
+  std::cerr << "CUDA Time: " << elapsedMs << " ms" << std::endl;
+  return 0;
 }

@@ -1,116 +1,127 @@
+import csv 
+import os
+import json
 import subprocess
+import re
+import multiprocessing
+from datetime import datetime
 import matplotlib.pyplot as plt
 import numpy as np
-import json
-import time
-import os # Import os module for path operations
-import csv # Import csv module
-from datetime import datetime # Import datetime module
-import re # Import regex module for parsing stderr
-import multiprocessing # For getting CPU count
+import pandas as pd
+import argparse
+import sys
 
-# --- Configuration ---
-# General
-build_config = "Release" # Or "Debug"
-output_dir = "results"   # Directory to save plots and data
-num_runs_per_case = 3    # Number of runs to average
-timeout_seconds = 600    # Timeout per algorithm run
-max_threads = multiprocessing.cpu_count() # Use detected core count
-thread_list_scalability = [1] + list(range(2, max_threads + 1, 2)) # e.g., [1, 2, 4, ..., max_threads]
+build_config = "Release" 
+output_dir = "results"   
+num_runs_per_case = 3    
+timeout_seconds = 600    
+max_threads = multiprocessing.cpu_count() 
+thread_list_scalability = [1] + list(range(2, max_threads + 1, 2)) 
 
-# Test Generation
-max_range = 50 # Max item weight/size/value
-min_range_start = 20 # Min item weight/size/value
+max_range = 50 
+min_range_start = 20 
 
-# Stage 1: Small 'n' Comparison (Brute, Dynamic, Greedy, Genetic)
-n_list_stage1 = [15, 18, 20, 22, 24, 26] # n values up to ~24
+n_list_stage1 = [15, 18, 20, 22, 24, 26] 
 algos_stage1 = [
-    'bruteKnapsack',      # Sequential Brute Force
-    'bruteKnapsackPar',   # Parallel Brute Force
-    'dynamicKnapsack',    # Dynamic Programming (Optimal)
-    'greedyKnapsack',     # Sequential Greedy
-    'greedyKnapsackPar',  # Parallel Greedy
-    'geneticKnapsack',    # Sequential Genetic
-    'geneticKnapsackPar'  # Parallel Genetic
+    'bruteKnapsack',      
+    'bruteKnapsackPar',   
+    'bruteKnapsackCuda',  
+    'dynamicKnapsack',    
+    'dynamicKnapsackCuda',
+    'greedyKnapsack',     
+    'greedyKnapsackPar',  
+    'greedyKnapsackCuda', 
+    'geneticKnapsack',    
+    'geneticKnapsackPar', 
+    'geneticKnapsackCuda' 
 ]
 
-# Stage 2: Large 'n' Comparison (Greedy, Genetic)
-n_list_stage2 = [50, 100, 200, 500, 1000, 2000] # n values beyond Brute Force
+n_list_stage2 = [50, 100, 200, 500, 1000, 2000] 
 algos_stage2 = [
-    'greedyKnapsack',     # Sequential Greedy
-    'greedyKnapsackPar',  # Parallel Greedy
-    'geneticKnapsack',    # Sequential Genetic
-    'geneticKnapsackPar'  # Parallel Genetic
+    'greedyKnapsack',     
+    'greedyKnapsackPar',  
+    'greedyKnapsackCuda', 
+    'geneticKnapsack',    
+    'geneticKnapsackPar', 
+    'geneticKnapsackCuda' 
 ]
 
-# Stage 3: Scalability Analysis
-# Note: n=24 is small for Greedy/Genetic scaling, consider increasing if needed
-n_for_scalability = 28
-algos_scalability = [ # Parallel algorithms to test
+n_for_scalability = 28 
+algos_scalability = [ 
     'bruteKnapsackPar',
     'greedyKnapsackPar',
-    'geneticKnapsackPar'
+    'geneticKnapsackPar',
 ]
-# Map parallel algos to their sequential counterparts for overhead comparison
+
 seq_map_scalability = {
     'bruteKnapsackPar': 'bruteKnapsack',
     'greedyKnapsackPar': 'greedyKnapsack',
     'geneticKnapsackPar': 'geneticKnapsack'
 }
 
-# --- Setup ---
-if not os.path.exists(output_dir):
-    os.makedirs(output_dir)
-build_path = f"./build/{build_config}"
-timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-csv_filename = os.path.join(output_dir, f"benchmark_data_{timestamp}.csv")
-csv_header = ['stage', 'n', 'algorithm', 'num_threads', 'avg_time_sec', 'run_times_sec']
-all_raw_data = [] # Collect data across all stages for single CSV write
+all_raw_data = []
 
-# --- Helper Functions (testGenerateCommand, generateTest, parse_cpp_time, testAlgo) ---
-# Keep these functions as they were in the previous version (including timeout in testAlgo)
+build_path = f"./build/{build_config}" 
+timestamp = datetime.now().strftime("%Y%m%d_%H%M%S") 
+csv_filename = os.path.join(output_dir, f"benchmark_data_{timestamp}.csv") 
+csv_header = ['stage', 'n', 'algorithm', 'num_threads', 'avg_time_sec', 'run_times_sec', 'value', 'weight1', 'weight2', 'solution_valid']
+
+
+
 def testGenerateCommand(num_items, min_val, max_val, seedrand=0):
     """Creates the command list for the test generation executable."""
     command = [os.path.join(build_path, "testgen"),
                f"--numitems={num_items}",
                f"--minweight={min_val}",
-               f"--maxweight={max_val}", # Capacity W tied to max item weight
+               f"--maxweight={max_val}", 
                f"--minsize={min_val}",
-               f"--maxsize={max_val}",   # Capacity S tied to max item size
-               f"--maxvalue={max_val}",  # Max item value also tied
+               f"--maxsize={max_val}",   
+               f"--maxvalue={max_val}",  
                f"--seedrand={seedrand}"
               ]
     return command
 
 def generateTest(num_items, min_val, max_val, seedrand=0):
     """Runs the test generator and returns the test instance JSON string."""
+    process_run_result = None  
     try:
         command = testGenerateCommand(num_items, min_val, max_val, seedrand)
-        result = subprocess.run(command, capture_output=True, text=True, check=True, encoding='utf-8')
-        if not result.stdout.strip():
+        process_run_result = subprocess.run(command, capture_output=True, text=True, check=True, encoding='utf-8')
+        if not process_run_result.stdout.strip():
             print(f"Error: testgen produced empty output for command: {' '.join(command)}")
-            print(f"Stderr: {result.stderr}")
+            if process_run_result.stderr:
+                print(f"Stderr: {process_run_result.stderr.strip()}")
             return None
-        # Validate JSON structure before returning
-        json.loads(result.stdout)
-        return result.stdout
+        
+        json.loads(process_run_result.stdout)
+        return process_run_result.stdout
     except json.JSONDecodeError as e:
         print(f"Error: testgen produced invalid JSON: {e}")
-        print(f"Output: {result.stdout[:200]}...")
+        if process_run_result and hasattr(process_run_result, 'stdout') and process_run_result.stdout:
+            print(f"Output from testgen (first 200 chars): {process_run_result.stdout[:200]}...")
+        else:
+            print("Output from testgen is unavailable or was empty.")
         return None
     except subprocess.CalledProcessError as e:
-        print(f"Error generating test instance: {e}\nStderr: {e.stderr}")
+        print(f"Error generating test instance: {e}")
+        if hasattr(e, 'stdout') and e.stdout:
+            print(f"Stdout: {e.stdout.strip()}")
+        if hasattr(e, 'stderr') and e.stderr:
+            print(f"Stderr: {e.stderr.strip()}")
         return None
     except FileNotFoundError:
+        
         print(f"Error: testgen executable not found at {os.path.join(build_path, 'testgen')}")
-        exit(1)
+        sys.exit(1) 
     except Exception as e:
         print(f"An unexpected error occurred during test generation: {e}")
+        if process_run_result and hasattr(process_run_result, 'stdout') and process_run_result.stdout:
+            print(f"Partial output from testgen (if any, first 200 chars): {process_run_result.stdout[:200]}...")
         return None
 
 def parse_cpp_time(stderr_output):
     """Parses the timing string 'Time: X ms' from C++ stderr."""
-    # Regex captures digits and dots, handling floating point ms values
+    
     match = re.search(r"Time:\s*([\d.]+)\s*ms", stderr_output)
     if match:
         try:
@@ -122,405 +133,424 @@ def parse_cpp_time(stderr_output):
 def run_single_test(program_name, test_instance_str, num_threads):
     """Runs a single instance of a knapsack algorithm."""
     program_path = os.path.join(build_path, program_name)
-    try:
-        test_data = json.loads(test_instance_str)
-        test_data["num_threads"] = num_threads
-        modified_test_instance = json.dumps(test_data)
+    run_time_sec = None
+    max_value_achieved = -1
+    total_weight1 = -1
+    total_weight2 = -1
+    is_valid_solution = False 
 
-        result = subprocess.run([program_path], input=modified_test_instance, encoding='utf-8',
+    try:
+        test_data_dict = json.loads(test_instance_str)
+
+        if not program_name.endswith("Cuda"):
+            test_data_dict["num_threads"] = num_threads
+        
+        modified_test_instance_str = json.dumps(test_data_dict)
+
+        result = subprocess.run([program_path], input=modified_test_instance_str, encoding='utf-8',
                                 capture_output=True, check=True, timeout=timeout_seconds)
 
-        # We primarily care about time now
-        algo_time_sec = parse_cpp_time(result.stderr)
-        if algo_time_sec is None:
-            print(f"Warning: Could not parse time for {program_name} (T={num_threads}). Stderr: {result.stderr.strip()}")
-            return None # Indicate failure
+        run_time_sec = parse_cpp_time(result.stderr)
 
-        return algo_time_sec # Return time in seconds
+        
+        if run_time_sec is None and program_name.endswith("Cuda"):
+            match_cuda = re.search(r"CUDA Time:\\s*([\\d.]+)\\s*ms", result.stderr)
+            if match_cuda:
+                try:
+                    run_time_sec = float(match_cuda.group(1)) / 1000.0
+                except ValueError:
+                    pass 
+
+        if run_time_sec is None:
+            print(f"Warning: Could not parse time for {program_name} (T={num_threads}). Stderr: {result.stderr.strip()}")
+
+        try:
+            solution_details = json.loads(result.stdout)
+            max_value_achieved = solution_details.get("value", -1)
+            total_weight1 = solution_details.get("weight1", -1) 
+            total_weight2 = solution_details.get("weight2", -1)
+            
+            if "weights" in solution_details and isinstance(solution_details["weights"], list) and len(solution_details["weights"]) == 2:
+                total_weight1 = solution_details["weights"][0]
+                total_weight2 = solution_details["weights"][1]
+
+            is_valid_solution = solution_details.get("valid", False) 
+        except json.JSONDecodeError:
+            
+            
+            value_match = re.search(r"Value:\\s*(\\d+)", result.stdout) 
+            if value_match:
+                max_value_achieved = int(value_match.group(1))
+            
 
     except json.JSONDecodeError:
         print(f"Error: Input JSON invalid for {program_name}. Input: {test_instance_str[:100]}...")
-        return None
+        
     except subprocess.TimeoutExpired:
         print(f"Error: {program_name} (T={num_threads}) timed out after {timeout_seconds}s.")
-        return timeout_seconds # Indicate timeout with max time
+        run_time_sec = timeout_seconds 
     except subprocess.CalledProcessError as e:
-        print(f"Error running {program_name} (T={num_threads}): {e}\nStderr: {e.stderr}")
-        return None
+        print(f"Error running {program_name} (T={num_threads}): {e}\\nStderr: {e.stderr.strip()}")
+        
     except FileNotFoundError:
         print(f"Error: Algorithm executable not found at {program_path}")
-        # This is fatal, maybe exit? For now, return None.
-        return None
+        sys.exit(1) 
     except Exception as e:
         print(f"An unexpected error occurred running {program_name} (T={num_threads}): {e}")
-        return None
+        
 
-# --- Benchmarking Functions ---
-def run_benchmark_stage(stage_name, n_list, algorithms_to_run):
+    return run_time_sec, max_value_achieved, total_weight1, total_weight2, is_valid_solution
+
+
+def run_benchmark_stage(stage_name, n_list, algorithms_to_run, current_all_raw_data):
     """Runs benchmarks for Stages 1 and 2 (varying n)."""
-    print(f"\n===== Running Benchmark Stage: {stage_name} =====")
-    # Results structure: {algo_name: {n: [list_of_times]}}
-    results = {algo: {n: [] for n in n_list} for algo in algorithms_to_run}
+    print(f"\\n===== Running Benchmark Stage: {stage_name} =====")
 
-    for n in n_list:
-        print(f"\n--- Testing n = {n} ---")
-        min_val = min_range_start
-        max_val = max_range # Use full range for generation
+    stage_results_for_plotting = {algo: {n_val: {'avg_time': 0, 'times': [], 'avg_value': 0, 'avg_w1':0, 'avg_w2':0, 'valid_count':0} for n_val in n_list} for algo in algorithms_to_run}
 
-        valid_runs_for_n = 0
-        for run_index in range(num_runs_per_case):
-            seed = run_index # Use run_index for reproducibility
-            print(f"  Run {run_index + 1}/{num_runs_per_case}...")
-            test_instance = generateTest(n, min_val, max_val, seed)
+    for n_val in n_list:
+        print(f"\\n--- Testing n = {n_val} ---")
+        min_val_gen = min_range_start
+        max_val_gen = max_range
+
+        for algo_name in algorithms_to_run:
+            print(f"  Algorithm: {algo_name}")
+            times_for_algo_n = []
+            values_for_algo_n = []
+            w1s_for_algo_n = []
+            w2s_for_algo_n = []
+            valid_solutions_count = 0
+            
+            threads_for_run = 1
+            if algo_name.endswith("Par"): 
+                threads_for_run = max_threads 
+            
+
+            for run_idx in range(num_runs_per_case):
+                seed = run_idx 
+                print(f"    Run {run_idx + 1}/{num_runs_per_case} (seed={seed})...")
+                test_instance = generateTest(n_val, min_val_gen, max_val_gen, seed)
+                if not test_instance:
+                    print(f"      Skipping run due to test generation error.")
+                    continue
+
+                time_sec, val, w1, w2, is_valid = run_single_test(algo_name, test_instance, threads_for_run)
+
+                if time_sec is not None:
+                    times_for_algo_n.append(time_sec)
+                if val != -1 : 
+                    values_for_algo_n.append(val)
+                if w1 != -1: w1s_for_algo_n.append(w1)
+                if w2 != -1: w2s_for_algo_n.append(w2)
+                if is_valid: valid_solutions_count +=1
+                
+                
+                current_all_raw_data.append({
+                    'stage': stage_name, 'n': n_val, 'algorithm': algo_name,
+                    'num_threads': threads_for_run, 
+                    'avg_time_sec': time_sec if time_sec is not None else 'Error/Timeout', 
+                    'run_times_sec': f"[{time_sec}]" if time_sec is not None else 'Error/Timeout', 
+                    'value': val, 'weight1': w1, 'weight2': w2,
+                    'solution_valid': is_valid
+                })
+
+            if times_for_algo_n:
+                avg_time = sum(times_for_algo_n) / len(times_for_algo_n)
+                stage_results_for_plotting[algo_name][n_val]['avg_time'] = avg_time
+                stage_results_for_plotting[algo_name][n_val]['times'] = times_for_algo_n
+            if values_for_algo_n:
+                 stage_results_for_plotting[algo_name][n_val]['avg_value'] = sum(values_for_algo_n) / len(values_for_algo_n)
+            if w1s_for_algo_n: stage_results_for_plotting[algo_name][n_val]['avg_w1'] = sum(w1s_for_algo_n) / len(w1s_for_algo_n)
+            if w2s_for_algo_n: stage_results_for_plotting[algo_name][n_val]['avg_w2'] = sum(w2s_for_algo_n) / len(w2s_for_algo_n)
+            stage_results_for_plotting[algo_name][n_val]['valid_count'] = valid_solutions_count
+            
+            print(f"    Avg time for {algo_name} at n={n_val}: {stage_results_for_plotting[algo_name][n_val]['avg_time']:.4f}s over {len(times_for_algo_n)} valid runs")
+
+    return stage_results_for_plotting
+
+
+def run_scalability_benchmark(stage_name, n_fixed, thread_list, algorithms_to_test, seq_map, current_all_raw_data):
+    """Runs scalability tests for Stage 3 (fixed n, varying threads)."""
+    print(f"\\n===== Running Benchmark Stage: {stage_name} (n={n_fixed}) =====")
+
+    scalability_results_for_plotting = {algo: {thr: {'avg_time': 0, 'times': [], 'avg_value': 0, 'avg_w1':0, 'avg_w2':0, 'valid_count':0} for thr in thread_list} for algo in algorithms_to_test}
+    
+    seq_times = {}
+    for par_algo, seq_algo in seq_map.items():
+        if seq_algo not in algorithms_to_test and par_algo in algorithms_to_test : 
+            print(f"  Getting sequential baseline for {par_algo} using {seq_algo} at n={n_fixed}...")
+            times_for_seq_n = []
+            
+            test_instance = generateTest(n_fixed, min_range_start, max_range, seedrand=0) 
             if not test_instance:
-                print(f"    Skipping run {run_index+1} due to test generation error.")
+                print(f"    Skipping sequential baseline for {seq_algo} due to test generation error.")
+                continue
+            for run_idx in range(num_runs_per_case):
+                time_sec, _, _, _, _ = run_single_test(seq_algo, test_instance, 1) 
+                if time_sec is not None:
+                    times_for_seq_n.append(time_sec)
+            if times_for_seq_n:
+                seq_times[par_algo] = sum(times_for_seq_n) / len(times_for_seq_n)
+                print(f"    Avg sequential time for {seq_algo} (baseline for {par_algo}): {seq_times[par_algo]:.4f}s")
+
+
+    for algo_name in algorithms_to_test:
+        print(f"\\n--- Algorithm: {algo_name} (n={n_fixed}) ---")
+        for num_threads in thread_list:
+            if not algo_name.endswith("Par") and num_threads > 1: 
                 continue
 
-            run_successful = True
-            temp_run_times = {algo: -1.0 for algo in algorithms_to_run} # Store times for this run
+            print(f"  Testing with {num_threads} threads...")
+            times_for_algo_threads = []
+            values_for_algo_threads = []
+            w1s_for_algo_threads = []
+            w2s_for_algo_threads = []
+            valid_solutions_count = 0
 
-            for algo_name in algorithms_to_run:
-                # Determine threads: Max for parallel, 1 for sequential
-                is_parallel = algo_name.endswith("Par")
-                threads_for_run = max_threads if is_parallel else 1
+            for run_idx in range(num_runs_per_case):
+                seed = run_idx 
+                print(f"    Run {run_idx + 1}/{num_runs_per_case} (seed={seed})...")
+                test_instance = generateTest(n_fixed, min_range_start, max_range, seed)
+                if not test_instance:
+                    print(f"      Skipping run due to test generation error.")
+                    continue
+                
+                time_sec, val, w1, w2, is_valid = run_single_test(algo_name, test_instance, num_threads)
+                if time_sec is not None:
+                    times_for_algo_threads.append(time_sec)
+                if val != -1: values_for_algo_threads.append(val)
+                if w1 != -1: w1s_for_algo_threads.append(w1)
+                if w2 != -1: w2s_for_algo_threads.append(w2)
+                if is_valid: valid_solutions_count +=1
 
-                algo_time_sec = run_single_test(algo_name, test_instance, threads_for_run)
-
-                if algo_time_sec is None or algo_time_sec >= timeout_seconds:
-                    print(f"    Run {run_index+1} for {algo_name} (T={threads_for_run}) failed or timed out. Skipping this entire run.")
-                    run_successful = False
-                    break # Stop processing this run_index
-
-                temp_run_times[algo_name] = algo_time_sec
-
-            if run_successful:
-                valid_runs_for_n += 1
-                # Append successful run times to results
-                for algo_name, time_sec in temp_run_times.items():
-                    results[algo_name][n].append(time_sec)
-            # else: times for this run_index are discarded
-
-        if valid_runs_for_n < num_runs_per_case:
-            print(f"  Warning: n={n} completed only {valid_runs_for_n}/{num_runs_per_case} valid runs.")
-        if valid_runs_for_n == 0:
-            print(f"  ERROR: n={n} had no valid runs. Data for this 'n' will be missing.")
-
-    # Process results for CSV and return structure for plotting
-    processed_results = {algo: {} for algo in algorithms_to_run}
-    for algo_name, n_data in results.items():
-        is_parallel = algo_name.endswith("Par")
-        threads_used = max_threads if is_parallel else 1
-        for n, times in n_data.items():
-            if times: # Check if list is not empty
-                avg_time = np.mean(times)
-                processed_results[algo_name][n] = avg_time
-                all_raw_data.append({
-                    'stage': stage_name, 'n': n, 'algorithm': algo_name,
-                    'num_threads': threads_used, 'avg_time_sec': avg_time,
-                    'run_times_sec': json.dumps(times) # Store raw times as JSON string
-                })
-            else:
-                 processed_results[algo_name][n] = np.nan # Indicate missing data
-
-    return processed_results
-
-def run_scalability_benchmark(stage_name, n_fixed, thread_list, algorithms_to_test, seq_map):
-    """Runs scalability tests for Stage 3 (fixed n, varying threads)."""
-    print(f"\n===== Running Benchmark Stage: {stage_name} (n={n_fixed}) =====")
-    # Results structure: {algo_name: {num_threads: [list_of_times]}}
-    results = {algo: {t: [] for t in thread_list} for algo in algorithms_to_test}
-    # Add entries for sequential baselines
-    seq_algorithms = [seq_map[p] for p in algorithms_to_test if p in seq_map and seq_map[p]]
-    results.update({seq_algo: {1: []} for seq_algo in seq_algorithms}) # Seq algos run with T=1
-
-    min_val = min_range_start
-    max_val = max_range
-    print(f"--- Generating fixed test instance for n = {n_fixed} ---")
-    fixed_seed = 42
-    test_instance = generateTest(n_fixed, min_val, max_val, fixed_seed)
-    if not test_instance:
-        print(f"FATAL ERROR: Could not generate test instance for scalability test (n={n_fixed}). Aborting stage.")
-        return None
-
-    print(f"--- Testing algorithms with threads: {thread_list} ---")
-
-    # Run Sequential Baselines first
-    for seq_algo_name in seq_algorithms:
-         print(f"  Running Sequential Baseline: {seq_algo_name} (x{num_runs_per_case} runs)...")
-         for run_index in range(num_runs_per_case):
-             algo_time_sec = run_single_test(seq_algo_name, test_instance, num_threads=1)
-             if algo_time_sec is not None:
-                 results[seq_algo_name][1].append(algo_time_sec)
-             else:
-                 print(f"    Run {run_index+1} for {seq_algo_name} failed. Data point missing.")
-
-    # Run Parallel Algorithms
-    for algo_name in algorithms_to_test:
-        print(f"  Testing Parallel Algorithm: {algo_name}")
-        for num_threads in thread_list:
-            print(f"    Threads = {num_threads} (x{num_runs_per_case} runs)...")
-            for run_index in range(num_runs_per_case):
-                algo_time_sec = run_single_test(algo_name, test_instance, num_threads=num_threads)
-
-                if algo_time_sec is None or algo_time_sec >= timeout_seconds:
-                    print(f"      Run {run_index+1} for T={num_threads} failed or timed out. Skipping run.")
-                    continue # Skip this run, try next
-
-                results[algo_name][num_threads].append(algo_time_sec)
-
-            if not results[algo_name][num_threads]:
-                 print(f"    ERROR: T={num_threads} had no valid runs. Data for this thread count will be missing.")
-
-    # Process results for CSV and return structure for plotting
-    processed_results = {}
-    for algo_name, thread_data in results.items():
-        processed_results[algo_name] = {}
-        for num_threads, times in thread_data.items():
-            if times:
-                avg_time = np.mean(times)
-                processed_results[algo_name][num_threads] = avg_time
-                all_raw_data.append({
+                current_all_raw_data.append({
                     'stage': stage_name, 'n': n_fixed, 'algorithm': algo_name,
-                    'num_threads': num_threads, 'avg_time_sec': avg_time,
-                    'run_times_sec': json.dumps(times)
+                    'num_threads': num_threads,
+                    'avg_time_sec': time_sec if time_sec is not None else 'Error/Timeout',
+                    'run_times_sec': f"[{time_sec}]" if time_sec is not None else 'Error/Timeout',
+                    'value': val, 'weight1': w1, 'weight2': w2,
+                    'solution_valid': is_valid
                 })
-            else:
-                processed_results[algo_name][num_threads] = np.nan
+            
+            if times_for_algo_threads:
+                avg_time = sum(times_for_algo_threads) / len(times_for_algo_threads)
+                scalability_results_for_plotting[algo_name][num_threads]['avg_time'] = avg_time
+                scalability_results_for_plotting[algo_name][num_threads]['times'] = times_for_algo_threads
+            if values_for_algo_threads:
+                scalability_results_for_plotting[algo_name][num_threads]['avg_value'] = sum(values_for_algo_threads) / len(values_for_algo_threads)
+            
+            scalability_results_for_plotting[algo_name][num_threads]['valid_count'] = valid_solutions_count
 
-    return processed_results
+            print(f"    Avg time for {algo_name} with {num_threads} threads: {scalability_results_for_plotting[algo_name][num_threads]['avg_time']:.4f}s over {len(times_for_algo_threads)} valid runs")
+    
+    
+    if hasattr(scalability_results_for_plotting, 'setdefault'): 
+         scalability_results_for_plotting.setdefault('_seq_times', seq_times)
 
-# --- Plotting Functions ---
-def plot_stage1_results(results, n_values):
-    """Plots Stage 1 results: Runtime vs. n."""
-    print(f"\n--- Generating Plot for Stage 1 (n={n_values}) ---")
-    plt.figure(figsize=(12, 7)) # Adjusted size slightly
-    ax = plt.gca()
-    ax.set_title(f"Runtime vs. Number of Items (Stage 1)")
 
-    # Plot data, handling potential missing points (NaN)
-    for algo_name, n_data in results.items():
-        times = [n_data.get(n, np.nan) for n in n_values]
-        valid_indices = ~np.isnan(times)
-        valid_n = np.array(n_values)[valid_indices]
-        valid_times = np.array(times)[valid_indices]
+    return scalability_results_for_plotting
 
-        if len(valid_times) > 0:
-            label = algo_name
-            marker = '.'
-            linestyle = '-'
-            is_parallel = algo_name.endswith("Par")
+def get_plot_style(algo_name):
+    """Returns a consistent style for a given algorithm name for plotting."""
+    
+    style = {'marker': 'o', 'linestyle': '-'}
+    if algo_name.endswith("Cuda"):
+        style['marker'] = '^'
+        style['linestyle'] = '--'
+        if "brute" in algo_name: style['color'] = 'red'
+        elif "dynamic" in algo_name: style['color'] = 'green'
+        elif "greedy" in algo_name: style['color'] = 'blue'
+        elif "genetic" in algo_name: style['color'] = 'purple'
+        else: style['color'] = 'black' 
+    elif algo_name.endswith("Par"):
+        style['marker'] = 's'
+        style['linestyle'] = ':'
+        if "brute" in algo_name: style['color'] = 'darkred'
+        elif "dynamic" in algo_name: style['color'] = 'darkgreen' 
+        elif "greedy" in algo_name: style['color'] = 'darkblue'
+        elif "genetic" in algo_name: style['color'] = 'indigo'
+        else: style['color'] = 'gray' 
+    else: 
+        style['marker'] = 'o'
+        style['linestyle'] = '-'
+        if "brute" in algo_name: style['color'] = 'salmon'
+        elif "dynamic" in algo_name: style['color'] = 'lightgreen'
+        elif "greedy" in algo_name: style['color'] = 'lightblue'
+        elif "genetic" in algo_name: style['color'] = 'violet'
+        else: style['color'] = 'dimgray' 
+    return style
 
-            # Assign markers/styles based on algorithm type
-            if 'brute' in algo_name:
-                marker = '.' if not is_parallel else 'x'
-            elif 'dynamic' in algo_name:
-                marker = '+'
-            elif 'greedy' in algo_name:
-                marker = 's' if not is_parallel else '^'
-            elif 'genetic' in algo_name:
-                marker = 'o' if not is_parallel else 'd'
-
-            linestyle = '--' if is_parallel else '-'
-            if algo_name == 'dynamicKnapsack': # Special case for dynamic
-                 linestyle = ':'
-
-            if is_parallel:
-                label += f" (Max T={max_threads})"
-
-            ax.plot(valid_n, valid_times, label=label, marker=marker, linestyle=linestyle)
-        else:
-            print(f"  Warning: No valid runtime data to plot for {algo_name} in Stage 1.")
-
-    ax.set_ylabel("Average Time (s)")
-    ax.set_xlabel("Number of Items (n)")
-    ax.legend()
-    ax.set_xticks(n_values)
-    ax.grid(True, which='both', linestyle='--', linewidth=0.5)
-    ax.set_yscale('log')
-
-    plt.tight_layout()
-    plot_filename = os.path.join(output_dir, f"plot_stage1_runtime_{timestamp}.png")
-    try:
-        plt.savefig(plot_filename)
-        print(f"Stage 1 plot saved successfully to {plot_filename}")
-    except Exception as e:
-        print(f"Error saving Stage 1 plot: {e}")
+def plot_stage1_results(data, n_values, algorithms, output_directory, time_stamp_str):
+    plt.figure(figsize=(12, 8))
+    for algo in algorithms:
+        if algo not in data: continue
+        avg_times = [data[algo].get(n, {}).get('avg_time', float('nan')) for n in n_values]
+        style = get_plot_style(algo)
+        plt.plot(n_values, avg_times, label=algo, marker=style['marker'], linestyle=style['linestyle'], color=style['color'])
+    plt.xlabel("Number of Items (n)")
+    plt.ylabel("Average Runtime (seconds)")
+    plt.title("Stage 1: Runtime vs. N (Small N)")
+    plt.legend()
+    plt.grid(True)
+    plt.yscale('log') 
+    plot_filename = os.path.join(output_directory, f"plot_stage1_runtime_{time_stamp_str}.png")
+    plt.savefig(plot_filename)
+    print(f"Stage 1 plot saved to {plot_filename}")
     plt.close()
 
-def plot_stage2_results(results, n_values):
-    """Plots Stage 2 results: Runtime vs. n."""
-    print(f"\n--- Generating Plot for Stage 2 (n={n_values}) ---")
-    plt.figure(figsize=(10, 6))
-    ax = plt.gca()
-    ax.set_title(f"Runtime vs. Number of Items (Stage 2)")
-
-    for algo_name, n_data in results.items():
-        times = [n_data.get(n, np.nan) for n in n_values]
-        valid_indices = ~np.isnan(times)
-        valid_n = np.array(n_values)[valid_indices]
-        valid_times = np.array(times)[valid_indices]
-
-        if len(valid_times) > 0:
-            label = algo_name
-            marker = '.' if 'Genetic' in algo_name else '+'
-            linestyle = '-'
-            if algo_name.endswith("Par"):
-                label += f" (Max T={max_threads})"
-                linestyle = '--'
-            ax.plot(valid_n, valid_times, label=label, marker=marker, linestyle=linestyle)
-        else:
-            print(f"  Warning: No valid runtime data to plot for {algo_name} in Stage 2.")
-
-    ax.set_ylabel("Average Time (s)")
-    ax.set_xlabel("Number of Items (n)")
-    ax.legend()
-    # ax.set_xticks(n_values) # Might be too crowded for large n ranges
-    ax.grid(True, which='both', linestyle='--', linewidth=0.5)
-    ax.set_yscale('log')
-    # ax.set_xscale('log') # Optional: Use log-log if expecting polynomial scaling
-
-    plt.tight_layout()
-    plot_filename = os.path.join(output_dir, f"plot_stage2_runtime_{timestamp}.png")
-    try:
-        plt.savefig(plot_filename)
-        print(f"Stage 2 plot saved successfully to {plot_filename}")
-    except Exception as e:
-        print(f"Error saving Stage 2 plot: {e}")
+def plot_stage2_results(data, n_values, algorithms, output_directory, time_stamp_str):
+    plt.figure(figsize=(12, 8))
+    for algo in algorithms:
+        if algo not in data: continue
+        avg_times = [data[algo].get(n, {}).get('avg_time', float('nan')) for n in n_values]
+        style = get_plot_style(algo)
+        plt.plot(n_values, avg_times, label=algo, marker=style['marker'], linestyle=style['linestyle'], color=style['color'])
+    plt.xlabel("Number of Items (n)")
+    plt.ylabel("Average Runtime (seconds)")
+    plt.title("Stage 2: Runtime vs. N (Large N)")
+    plt.legend()
+    plt.grid(True)
+    plt.yscale('log')
+    plot_filename = os.path.join(output_directory, f"plot_stage2_runtime_{time_stamp_str}.png")
+    plt.savefig(plot_filename)
+    print(f"Stage 2 plot saved to {plot_filename}")
     plt.close()
 
-def plot_scalability_results(results, n_fixed, thread_list, seq_map):
-    """Generates scalability plots (Runtime vs Threads, Speedup vs Threads)."""
-    print(f"\n--- Generating Scalability Plots (n = {n_fixed}) ---")
-    parallel_algorithms = [algo for algo in results if algo.endswith("Par")]
-    if not parallel_algorithms:
-        print("No parallel scalability data to plot.")
-        return
-
-    num_plots = 2 # Runtime, Speedup
-    plt.figure(figsize=(8 * num_plots, 6))
-
-    # Plot 1: Runtime vs Threads
-    ax1 = plt.subplot(1, num_plots, 1)
-    ax1.set_title(f"Runtime vs. Number of Threads (n = {n_fixed})")
+def plot_scalability_results(data, n_value_fixed, thread_values, algorithms, seq_data_map, output_directory, time_stamp_str):
+    plt.figure(figsize=(12, 8))
+    
+    ax1 = plt.gca()
+    for algo in algorithms: 
+        if algo not in data or not algo.endswith("Par"): continue 
+        avg_times = [data[algo].get(threads, {}).get('avg_time', float('nan')) for threads in thread_values]
+        style = get_plot_style(algo)
+        ax1.plot(thread_values, avg_times, label=f"{algo} (abs time)", marker=style['marker'], linestyle=style['linestyle'], color=style['color'])
+    
     ax1.set_xlabel("Number of Threads")
-    ax1.set_ylabel("Average Time (s)")
-    ax1.grid(True, which='both', linestyle='--', linewidth=0.5)
-    ax1.set_xticks(thread_list)
+    ax1.set_ylabel("Average Runtime (seconds)")
+    ax1.set_title(f"Scalability Analysis (n={n_value_fixed})")
+    ax1.legend(loc='upper right')
+    ax1.grid(True)
+    ax1.set_yscale('log')
 
-    # Plot 2: Speedup vs Threads
-    ax2 = plt.subplot(1, num_plots, 2)
-    ax2.set_title(f"Speedup vs. Number of Threads (n = {n_fixed})")
-    ax2.set_xlabel("Number of Threads")
-    ax2.set_ylabel("Speedup (Time(1 Thread) / Time(T Threads))")
-    ax2.grid(True, which='both', linestyle='--', linewidth=0.5)
-    ax2.set_xticks(thread_list)
+    
+    
+    seq_times_lookup = data.get('_seq_times', {})
+    
+    if seq_times_lookup:
+        ax2 = ax1.twinx() 
+        for algo in algorithms:
+            if algo not in data or not algo.endswith("Par"): continue
+            if algo not in seq_times_lookup or seq_times_lookup[algo] == 0: continue
 
-    # Add ideal speedup line
-    ax2.plot(thread_list, thread_list, label='Ideal Linear Speedup', color='grey', linestyle=':')
+            seq_time = seq_times_lookup[algo]
+            speedup_values = [seq_time / data[algo].get(threads, {}).get('avg_time', float('inf')) if data[algo].get(threads, {}).get('avg_time') else 0 for threads in thread_values]
+            style = get_plot_style(algo) 
+            
+            ax2.plot(thread_values, speedup_values, label=f"{algo} (speedup)", marker=style['marker'], linestyle='--', color=style['color'], alpha=0.7)
 
-    for algo_name in parallel_algorithms:
-        thread_data = results.get(algo_name, {})
-        times = [thread_data.get(t, np.nan) for t in thread_list]
-        valid_indices = ~np.isnan(times)
-        valid_threads = np.array(thread_list)[valid_indices]
-        valid_times = np.array(times)[valid_indices]
+        ax2.set_ylabel("Speedup (Sequential Time / Parallel Time)")
+        ax2.legend(loc='center right')
+        
+        ax2.plot(thread_values, thread_values, linestyle=':', color='gray', label='Ideal Speedup')
 
-        if len(valid_times) == 0:
-            print(f"  Skipping plots for {algo_name} due to no valid data.")
-            continue
 
-        # --- Runtime Plot ---
-        ax1.plot(valid_threads, valid_times, label=algo_name, marker='o', linestyle='-')
-
-        # Add sequential baseline to Runtime plot for overhead comparison
-        seq_algo_name = seq_map.get(algo_name)
-        if seq_algo_name and seq_algo_name in results:
-            seq_time = results[seq_algo_name].get(1, np.nan) # Seq time is at T=1
-            if not np.isnan(seq_time):
-                # Plot as a point or horizontal line
-                ax1.plot(1, seq_time, marker='s', markersize=8, linestyle='none',
-                         label=f"{seq_algo_name} (Seq Baseline)",
-                         color=ax1.lines[-1].get_color()) # Match color of parallel line
-                # Or plot as a line across the axis:
-                # ax1.axhline(y=seq_time, color=ax1.lines[-1].get_color(), linestyle=':',
-                #             label=f"{seq_algo_name} (Seq Baseline)")
-
-        # --- Speedup Plot ---
-        baseline_time_par = thread_data.get(1, np.nan) # Speedup relative to T=1 PARALLEL run
-
-        if not np.isnan(baseline_time_par) and baseline_time_par > 1e-9:
-            # Calculate speedup only for valid times > 0
-            speedup_threads = []
-            speedup_values = []
-            for i, t_val in enumerate(valid_times):
-                if t_val > 1e-9:
-                    speedup_threads.append(valid_threads[i])
-                    speedup_values.append(baseline_time_par / t_val)
-
-            if speedup_values:
-                ax2.plot(speedup_threads, speedup_values, label=f"{algo_name} Speedup", marker='x', linestyle='--')
-            else:
-                print(f"  Cannot plot speedup for {algo_name}, all valid times were near zero.")
-        elif 1 not in valid_threads:
-             print(f"  Cannot calculate speedup for {algo_name}, baseline (1 thread parallel) data missing.")
-        else:
-             print(f"  Cannot calculate speedup for {algo_name}, baseline time (1 thread parallel) is near zero ({baseline_time_par:.2e}s).")
-
-    # Final plot adjustments
-    ax1.legend()
-    ax1.set_yscale('log') # Runtimes often vary widely
-    ax2.legend()
-
-    plt.tight_layout(pad=2.0)
-    plot_filename = os.path.join(output_dir, f"plot_scalability_n{n_fixed}_{timestamp}.png")
-    try:
-        plt.savefig(plot_filename)
-        print(f"\nScalability plots saved successfully to {plot_filename}")
-    except Exception as e:
-        print(f"Error saving scalability plots: {e}")
+    plot_filename = os.path.join(output_directory, f"plot_scalability_n{n_value_fixed}_{time_stamp_str}.png")
+    plt.savefig(plot_filename)
+    print(f"Scalability plot saved to {plot_filename}")
     plt.close()
 
-def save_results_to_csv(filename):
-    """Saves the collected raw data to a CSV file."""
-    print(f"\n--- Saving all results to CSV: {filename} ---")
-    try:
-        with open(filename, 'w', newline='', encoding='utf-8') as csvfile:
-            writer = csv.DictWriter(csvfile, fieldnames=csv_header)
-            writer.writeheader()
-            # Sort data for better readability in CSV (optional)
-            sorted_data = sorted(all_raw_data, key=lambda x: (x['stage'], x['algorithm'], x['n'], x['num_threads']))
-            writer.writerows(sorted_data)
-        print("CSV saving completed successfully.")
-    except IOError as e:
-        print(f"Error writing CSV file: {e}")
-    except Exception as e:
-        print(f"An unexpected error occurred during CSV writing: {e}")
 
-# --- Main Execution ---
+def main():
+    parser = argparse.ArgumentParser(description="Run knapsack algorithm benchmarks.",
+                                     formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument('--stages', nargs='*', type=int, choices=[1, 2, 3], default=None,
+                        help='List of stages to run (1, 2, 3). Runs all if not specified or if list is empty.')
+    parser.add_argument('--algorithms', nargs='*', type=str, default=None,
+                        help='List of specific algorithms to run (e.g., bruteKnapsack greedyKnapsackCuda). Runs all relevant algorithms for the selected stages if not specified.')
+    parser.add_argument('--n_values_stage1', nargs='*', type=int, default=None, help='Override n values for Stage 1.')
+    parser.add_argument('--n_values_stage2', nargs='*', type=int, default=None, help='Override n values for Stage 2.')
+    parser.add_argument('--n_value_scalability', type=int, default=None, help='Override n value for Stage 3 (Scalability).')
+
+    args = parser.parse_args()
+    current_all_raw_data = []
+    if not os.path.exists(output_dir):
+        os.makedirs(output_dir)
+    
+    
+    stages_to_run = args.stages
+    if stages_to_run is None or not stages_to_run: 
+        stages_to_run = [1, 2, 3] 
+
+    selected_algorithms_filter = args.algorithms
+
+    current_n_list_stage1 = args.n_values_stage1 if args.n_values_stage1 else n_list_stage1
+    current_n_list_stage2 = args.n_values_stage2 if args.n_values_stage2 else n_list_stage2
+    current_n_for_scalability = args.n_value_scalability if args.n_value_scalability is not None else n_for_scalability
+
+    if 1 in stages_to_run:
+        algos_for_stage1 = algos_stage1
+        if selected_algorithms_filter:
+            algos_for_stage1 = [a for a in algos_stage1 if a in selected_algorithms_filter]
+        
+        if not algos_for_stage1:
+            print("No algorithms selected or available for Stage 1 based on current filters.")
+        else:
+            results_stage1 = run_benchmark_stage("Stage 1 (Small N)", current_n_list_stage1, algos_for_stage1, current_all_raw_data)
+            if results_stage1: 
+                plot_stage1_results(results_stage1, current_n_list_stage1, algos_for_stage1, output_dir, timestamp)
+
+    
+    if 2 in stages_to_run:
+        algos_for_stage2 = algos_stage2
+        if selected_algorithms_filter:
+            algos_for_stage2 = [a for a in algos_stage2 if a in selected_algorithms_filter]
+
+        if not algos_for_stage2:
+            print("No algorithms selected or available for Stage 2 based on current filters.")
+        else:
+            results_stage2 = run_benchmark_stage("Stage 2 (Large N)", current_n_list_stage2, algos_for_stage2, current_all_raw_data)
+            if results_stage2:
+                plot_stage2_results(results_stage2, current_n_list_stage2, algos_for_stage2, output_dir, timestamp)
+                
+    
+    if 3 in stages_to_run:
+        algos_for_scalability_stage = algos_scalability
+        current_seq_map = seq_map_scalability
+        if selected_algorithms_filter:
+            algos_for_scalability_stage = [a for a in algos_scalability if a in selected_algorithms_filter]
+            current_seq_map = {k: v for k, v in seq_map_scalability.items() if k in algos_for_scalability_stage}
+
+        if not algos_for_scalability_stage:
+            print("No algorithms selected or available for Stage 3 based on current filters.")
+        else:
+            results_scalability = run_scalability_benchmark("Stage 3 (Scalability)", current_n_for_scalability, thread_list_scalability, algos_for_scalability_stage, current_seq_map, current_all_raw_data)
+            if results_scalability:
+                 plot_scalability_results(results_scalability, current_n_for_scalability, thread_list_scalability, algos_for_scalability_stage, current_seq_map, output_dir, timestamp)
+
+    
+    if current_all_raw_data:
+        
+        
+        final_csv_filename = os.path.join(output_dir, f"benchmark_data_{timestamp}.csv") 
+        try:
+            with open(final_csv_filename, 'w', newline='') as f:
+                if current_all_raw_data:
+                    actual_header = list(current_all_raw_data[0].keys())
+                    for key_to_check in ['value', 'weight1', 'weight2', 'solution_valid']:
+                        if key_to_check not in actual_header and any(item.get(key_to_check) is not None for item in current_all_raw_data):
+                             print(f"Warning: CSV header might be missing key: {key_to_check}")
+                    writer = csv.DictWriter(f, fieldnames=csv_header)
+                else: 
+                    writer = csv.DictWriter(f, fieldnames=csv_header)
+
+                writer.writeheader()
+                writer.writerows(current_all_raw_data)
+            print(f"\\nBenchmark data saved to {final_csv_filename}")
+        except Exception as e:
+            print(f"Error writing CSV file: {e}")
+    else:
+        print("\\nNo benchmark data collected.")
+
 if __name__ == "__main__":
-    print(f"Starting benchmarks... Max threads to use for parallel algos: {max_threads}")
-
-    # Run Stage 1
-    stage1_results = run_benchmark_stage("Stage1_Small_N", n_list_stage1, algos_stage1)
-    if stage1_results:
-        plot_stage1_results(stage1_results, n_list_stage1)
-
-    # Run Stage 2
-    stage2_results = run_benchmark_stage("Stage2_Large_N", n_list_stage2, algos_stage2)
-    if stage2_results:
-        plot_stage2_results(stage2_results, n_list_stage2)
-
-    # Run Stage 3 - Scalability
-    scalability_results = run_scalability_benchmark("Stage3_Scalability", n_for_scalability,
-                                                    thread_list_scalability, algos_scalability,
-                                                    seq_map_scalability)
-    if scalability_results:
-        plot_scalability_results(scalability_results, n_for_scalability,
-                                 thread_list_scalability, seq_map_scalability)
-
-    # Save all collected data to CSV
-    save_results_to_csv(csv_filename)
-
-    print("\n===== Benchmark Complete =====")
-    print(f"Results saved in directory: {output_dir}")
-    print(f"Raw data saved to: {csv_filename}")
+    main()

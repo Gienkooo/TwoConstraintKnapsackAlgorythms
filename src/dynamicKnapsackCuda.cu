@@ -101,33 +101,10 @@ extern "C" int runDynamicKnapsackCuda(int n, int maxW, int maxS,
   cudaEventDestroy(startEvent);
   cudaEventDestroy(stopEvent);
 
-  // Output JSON for value
   std::cout << "{\\" value\\": " << result << "}" << std::endl;
-  // Output CUDA specific time
   std::cerr << "CUDA Time: " << elapsedMs << " ms" << std::endl;
   return result;
 }
-
-/*
-
-#include <vector>
-int main() {
-    int n_items = 3;
-    int capacity_w = 50;
-    int capacity_s = 60;
-    std::vector<int> weights_vec = {10, 20, 30};
-    std::vector<int> sizes_vec = {20, 25, 35};
-    std::vector<int> values_vec = {60, 100, 120};
-
-    runDynamicKnapsackCuda(n_items, capacity_w, capacity_s, weights_vec.data(),
-sizes_vec.data(), values_vec.data());
-
-    return 0;
-}
-*/
-
-// Add nlohmann/json.hpp include if not already present at the top
-// #include <nlohmann/json.hpp>
 
 int main() {
   nlohmann::json data;

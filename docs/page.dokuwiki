@@ -1,0 +1,702 @@
+==== Projekt: Równoległe algorytmy rozwiązywania problemu plecakowego z dwoma ograniczeniami (OpenMP) ====
+
+^ Data ^ Status projektu ^ 
+|2025-03-01 | Katalog projektu -> Kody -> [[ok:chmura_pp]]| 
+|2025-03-30| Wybór tematu (do końca marca); Literatura -> [[pp:bibtex]] | 
+|2025-04-01|Rozpoczęty | 
+|2025-04-30|Raport z działania algorytmu w wersji sekwencyjnej (do końca kwietnia) | 
+|2025-05-05|Implementacja wersji równoległych | 
+|2025-05-20|Wykonywany | 
+|2025-05-27|Testowany -> [[pr:skrypty]] | 
+|2025-05-31|Zakończony (do końca maja) | 
+|2025-06-07|USOS |
+
+==== Autor ====
+
+Mateusz Juszczak, s155958
+
+==== Streszczenie ====
+
+Projekt implementuje i porównuje wydajność sekwencyjnych oraz równoległych (z wykorzystaniem [[wsp:openmp|OpenMP]]) algorytmów dla problemu plecakowego z dwoma ograniczeniami. Analizowane są algorytmy: pełnego przeglądu, dynamiczny (tylko sekwencyjny), zachłanny oraz genetyczny. Badana jest złożoność czasowa, jakość rozwiązań (dla algorytmów aproksymacyjnych) oraz skalowalność wersji równoległych w zależności od liczby wątków i rozmiaru problemu. Testy przeprowadzono przy użyciu skryptu automatyzującego, generującego dane wejściowe i mierzącego czasy wykonania.
+
+==== Abstract ====
+
+This project implements and compares the performance of sequential and parallel (using OpenMP) algorithms for the two-constraint knapsack problem. The analyzed algorithms include: brute force, dynamic programming (sequential only), greedy, and genetic. The study examines time complexity, solution quality (for approximation algorithms), and the scalability of parallel versions concerning the number of threads and problem size. Tests were conducted using an automated script that generates input data and measures execution times.
+
+==== Zagadnienia teoretyczne ====
+
+== Słowa kluczowe: ==
+
+  * Problem plecakowy z dwoma ograniczeniami
+  * Optymalizacja kombinatoryczna
+  * Algorytmy równoległe
+  * OpenMP
+  * Algorytm pełnego przeglądu
+  * Algorytm dynamiczny
+  * Algorytm zachłanny
+  * Algorytm genetyczny
+  * Skalowalność
+  * Przyspieszenie
+Przepraszam za moje poprzednie niedokładności. Masz absolutną rację, linki nie były odpowiednie. Postaram się teraz znaleźć poprawne linki do Wikidata dla każdego z tych pojęć związanych z OpenMP i programowaniem równoległym.
+
+Oto poprawiona tabelka z linkami do Wikidata, które powinny być zgodne z terminami:
+
+== Słownik pojęć ==
+
+^ Id ^ PL ^ EN ^ Opis ^
+| [[https://www.wikidata.org/wiki/Q496579|Q496579]] | [[wsp:openmp|OpenMP]] | OpenMP | API do programowania równoległego na architekturach z pamięcią współdzieloną. |
+| [[https://www.wikidata.org/wiki/Q213092|Q213092]] | Wątek | Thread | Podstawowa jednostka wykonania w procesie, umożliwiająca współbieżność. |
+| | Region równoległy | Parallel Region | Blok kodu wykonywany przez zespół wątków. |
+| | Dyrektywa | Directive | Instrukcja dla kompilatora OpenMP (#pragma omp ...). |
+| [[https://www.wikidata.org/wiki/Q1197709|Q1197709]] | Redukcja | Reduction | Operacja łączenia wyników częściowych z różnych wątków (np. max, sum). |
+| [[https://www.wikidata.org/wiki/Q1365224|Q1365224]] | Zadanie | Task | Jednostka pracy, która może być wykonana przez dowolny wątek w zespole. |
+| [[https://www.wikidata.org/wiki/Q1123036|Q1123036]] | Harmonogramowanie | Scheduling | Sposób dystrybucji iteracji pętli między wątki (static, dynamic). |
+| | Zmienna prywatna | Private | Zmienna, której kopia jest tworzona dla każdego wątków. |
+| | Zmienna współdzielona | Shared | Zmienna dostępna dla wszystkich wątków w regionie równoległym. |
+| | Skalowalność | Scalability | Zdolność algorytmu równoległego do efektywnego wykorzystania rosnącej liczby procesorów/wątków. |
+| [[https://www.wikidata.org/wiki/Q1549489|Q1549489]] | [[pr:przyspieszenie|Przyspieszenie]] | Speedup | Stosunek czasu wykonania algorytmu sekwencyjnego do czasu wykonania algorytmu równoległego. |
+
+==== Opis problemu ==== 
+
+Problem plecakowy z dwoma ograniczeniami (ang. //Two-Constraint Knapsack Problem//) jest rozszerzeniem klasycznego problemu plecakowego. Dany jest zbiór przedmiotów, z których każdy ma określoną wartość, wagę oraz rozmiar (drugie ograniczenie). Celem jest wybór takiego podzbioru przedmiotów, aby suma ich wartości była maksymalna, przy jednoczesnym nieprzekroczeniu zadanej maksymalnej wagi całkowitej oraz maksymalnego rozmiaru całkowitego plecaka. Jest to problem NP-trudny.
+
+==== Spis zaimplementowanych algorytmów ====
+
+^ Lp ^ Algorytm (KOD) ^ Kategoria ^ Przeznaczenie ^ Uwagi ^
+| 1 | bruteKnapsack (BK) | Pełnego przeglądu | Problem plecakowy 2D | Sekwencyjny, Złożoność: $\mathcal{O}(2^n)$ |
+| 2 | bruteKnapsackPar (BKP) | Pełnego przeglądu | Problem plecakowy 2D | Równoległy (OpenMP), Złożoność: $\mathcal{O}(2^n)$ |
+| 3 | dynamicKnapsack (DK) | Dynamiczny | Problem plecakowy 2D | Sekwencyjny, Złożoność: $\mathcal{O}(n \cdot W \cdot S)$ |
+| 4 | greedyKnapsack (GK) | Zachłanny | Problem plecakowy 2D | Sekwencyjny, Złożoność: $\mathcal{O}(n \log n)$ |
+| 5 | greedyKnapsackPar (GKP) | Zachłanny | Problem plecakowy 2D | Równoległy (OpenMP), Złożoność: $\mathcal{O}(n \log n)$ |
+| 6 | geneticKnapsack (EK) | Genetyczny | Problem plecakowy 2D | Sekwencyjny, Złożoność: $\mathcal{O}(G \cdot P^2 \cdot n)$ |
+| 7 | geneticKnapsackPar (EKP) | Genetyczny | Problem plecakowy 2D | Równoległy (OpenMP), Złożoność: $\mathcal{O}(G \cdot P \cdot n)$ |
+| 8 | bruteKnapsackCuda (BKC) | Pełnego przeglądu | Problem plecakowy 2D | CUDA, Złożoność: $\mathcal{O}(2^n / B)$ |
+| 9 | dynamicKnapsackCuda (DKC) | Dynamiczny | Problem plecakowy 2D | CUDA, Złożoność: $\mathcal{O}(n \cdot W \cdot S / B)$ |
+| 10 | greedyKnapsackCuda (GKC) | Zachłanny | Problem plecakowy 2D | CUDA, Złożoność: $\mathcal{O}(n \log n / B)$ |
+| 11 | geneticKnapsackCuda (EKC) | Genetyczny | Problem plecakowy 2D | CUDA, Złożoność: $\mathcal{O}(G \cdot P \cdot n / B)$ |
+
+// B - liczba bloków/wątków GPU //
+
+==== Algorytmy CUDA ====
+Dodano wersje GPU (CUDA) dla wszystkich głównych algorytmów. Każdy z nich korzysta z równoległości GPU do przyspieszenia obliczeń. Wyniki i czasy działania są zintegrowane z systemem benchmarków i wykresami (kody: BKC, DKC, GKC, EKC).
+
+^ Algorytm ^ Kod ^ Opis ^
+| bruteKnapsackCuda | BKC | Pełny przegląd na GPU, każda kombinacja rozważana przez osobny wątek/blok |
+| dynamicKnapsackCuda | DKC | Dynamiczny na GPU, tablica DP na urządzeniu |
+| greedyKnapsackCuda | GKC | Zachłanny na GPU, sortowanie i wybór na GPU |
+| geneticKnapsackCuda | EKC | Genetyczny na GPU, cała populacja i ewolucja na GPU |
+
+==== Schemat wejścia JSON ====
+Przykładowy format wejścia dla wszystkich algorytmów (w tym CUDA):
+<code javascript>
+{
+  "n": 5,
+  "maxweight": 10,
+  "maxsize": 8,
+  "values":   [4, 2, 1, 10, 2],
+  "weights":  [3, 1, 2, 6, 2],
+  "sizes":    [2, 2, 1, 5, 2]
+}
+</code>
+
+Wynik działania (stdout):
+<code javascript>
+{"value": 15}
+</code>
+Czas działania (stderr):
+<code>
+CUDA Time: 1.23 ms
+</code>
+
+==== Schematy struktur danych ====<br>^ Struktura ^ Schemat ^ Opis ^
+| Item | <code c>
+struct Item {
+  int id;
+  int weight;
+  int size;
+  int value;
+  double ratio;
+};
+</code> | Reprezentuje pojedynczy przedmiot |
+| Rozwiązanie | <code c>
+std::vector<int> solution; // 0/1 dla każdego przedmiotu
+</code> | Rozwiązanie plecakowe |
+| Populacja (genetyczny) | <code c>
+std::vector<std::vector<int>> population; // populacja chromosomów
+</code> | Populacja algorytmu genetycznego |
+| Tablica DP | <code c>
+std::vector<std::vector<std::vector<int>>> dp; // [n+1][maxW+1][maxS+1]
+</code> | Tablica dynamiczna |
+
+==== Ujednolicone kody algorytmów na wykresach ====<br>Na wykresach i w plikach CSV używane są następujące kody:
+  * BK  – bruteKnapsack
+  * BKP – bruteKnapsackPar
+  * DK  – dynamicKnapsack
+  * GK  – greedyKnapsack
+  * GKP – greedyKnapsackPar
+  * EK  – geneticKnapsack
+  * EKP – geneticKnapsackPar
+  * BKC – bruteKnapsackCuda
+  * DKC – dynamicKnapsackCuda
+  * GKC – greedyKnapsackCuda
+  * EKC – geneticKnapsackCuda
+
+==== Przykładowe dane wejściowe i wyniki działania algorytmu ====<br>Dane wejściowe są generowane losowo przez program ''testgen.exe'' (kod w ''src/testgen.cpp'') na podstawie parametrów podanych w skrypcie ''run.py''. Format danych to JSON, zawierający liczbę przedmiotów (n), limity (maxweight, maxsize) oraz wektory wartości, wag i rozmiarów.
+
+Przykładowy format JSON:
+<code javascript>
+{
+  "n": 5,
+  "maxweight": 10,
+  "maxsize": 8,
+  "values":   [4, 2, 1, 10, 2],
+  "weights":  [3, 1, 2, 6, 2],
+  "sizes":    [2, 2, 1, 5, 2]
+}
+</code>
+
+Wyniki działania algorytmów (maksymalna wartość) są wypisywane na standardowe wyjście, a czas wykonania na standardowe wyjście błędów, np.:
+<code>
+{"value": 15}
+CUDA Time: 1.23 ms
+</code>
+
+==== Przykładowe fragmenty kodów algorytmów (snippety) ====<br>^ Kod ^ Algorytm ^ Fragment kodu ^
+| BK | bruteKnapsack | <code c>
+// Przegląd wszystkich kombinacji (pełny przegląd)
+int max_value = 0;
+for (long long i = 0; i < (1LL << n); ++i) {
+  int w = 0, s = 0, v = 0;
+  for (int j = 0; j < n; ++j)
+    if ((i >> j) & 1) {
+      w += weights[j];
+      s += sizes[j];
+      v += values[j];
+    }
+  if (w <= maxW && s <= maxS)
+    max_value = max(max_value, v);
+}
+</code> |
+| BKP | bruteKnapsackPar | <code c>
+// Równoległy przegląd kombinacji (OpenMP)
+int max_value = 0;
+#pragma omp parallel for reduction(max:max_value)
+for (long long i = start; i < end; ++i) {
+  int w = 0, s = 0, v = 0;
+  for (int j = 0; j < n; ++j)
+    if ((i >> j) & 1) {
+      w += weights[j];
+      s += sizes[j];
+      v += values[j];
+    }
+  if (w <= maxW && s <= maxS)
+    max_value = max(max_value, v);
+}
+</code> |
+| DK | dynamicKnapsack | <code c>
+// Dynamiczne programowanie 3D
+vector<vector<vector<int>>> dp(n+1, vector<vector<int>>(maxW+1, vector<int>(maxS+1, 0)));
+for (int i = 1; i <= n; ++i)
+  for (int w = 0; w <= maxW; ++w)
+    for (int s = 0; s <= maxS; ++s) {
+      dp[i][w][s] = dp[i-1][w][s];
+      if (w >= weights[i-1] && s >= sizes[i-1])
+        dp[i][w][s] = max(dp[i][w][s], dp[i-1][w-weights[i-1]][s-sizes[i-1]] + values[i-1]);
+    }
+</code> |
+| GK | greedyKnapsack | <code c>
+// Sortowanie po opłacalności i zachłanne pakowanie
+vector<Item> items = ...;
+sort(items.begin(), items.end(), compareItems);
+int w = 0, s = 0, value = 0;
+for (auto& item : items) {
+  if (w + item.weight <= maxW && s + item.size <= maxS) {
+    w += item.weight;
+    s += item.size;
+    value += item.value;
+  }
+}
+</code> |
+| GKP | greedyKnapsackPar | <code c>
+// Równoległa inicjalizacja i sortowanie (OpenMP)
+#pragma omp parallel for
+for (int i = 0; i < n; ++i) items[i] = ...;
+parallelMergeSort(items.begin(), items.end(), compareItems);
+// Następnie zachłanne pakowanie jak w GK
+</code> |
+| EK | geneticKnapsack | <code c>
+// Algorytm genetyczny: ewolucja populacji
+vector<vector<int>> population = populate();
+for (int gen = 0; gen < generations; ++gen) {
+  // selekcja, krzyżowanie, mutacja
+  population = evolvePopulation(population);
+}
+int best = bestFitness(population);
+</code> |
+| EKP | geneticKnapsackPar | <code c>
+// Równoległa inicjalizacja i ewolucja (OpenMP)
+#pragma omp parallel for
+for (int i = 0; i < populationSize; ++i) population[i] = ...;
+// Równoległe generowanie dzieci
+#pragma omp parallel for schedule(dynamic)
+for (int i = 0; i < numChildren; ++i) {
+  // selekcja, krzyżowanie, mutacja
+}
+</code> |
+| BKC | bruteKnapsackCuda | <code cuda>
+// Każdy wątek GPU sprawdza inną kombinację
+__global__ void bruteKnapsackKernel(...) {
+  int tid = threadIdx.x;
+  long long idx = blockIdx.x * blockDim.x + threadIdx.x + start;
+  int localMax = 0;
+  if (idx < end) {
+    int ws = 0, ss = 0, vs = 0;
+    for (int j = 0; j < n; ++j)
+      if ((idx >> j) & 1) {
+        vs += values[j]; ws += weights[j]; ss += sizes[j];
+      }
+    if (ws <= maxW && ss <= maxS) localMax = vs;
+  }
+  // Redukcja w bloku
+  sdata[tid] = localMax;
+  __syncthreads();
+  for (int s = blockDim.x / 2; s > 0; s >>= 1) {
+    if (tid < s) sdata[tid] = max(sdata[tid], sdata[tid + s]);
+    __syncthreads();
+  }
+  if (tid == 0) atomicMax(d_maxValue, sdata[0]);
+}
+</code> |
+| DKC | dynamicKnapsackCuda | <code cuda>
+// Równoległe wypełnianie tablicy DP na GPU
+__global__ void dpKernel(...) {
+  int i = blockIdx.x;
+  int w = threadIdx.y;
+  int s = threadIdx.z;
+  int idx = ...; // indeks w dp
+  int without = dp_prev[idx];
+  int with = -INF;
+  if (w >= weights[i-1] && s >= sizes[i-1])
+    with = dp_prev[...]+values[i-1];
+  dp[idx] = max(without, with);
+}
+// Kernel wywoływany dla kolejnych i
+</code> |
+| GKC | greedyKnapsackCuda | <code cuda>
+// Sortowanie na GPU (Thrust) i zachłanne pakowanie
+thrust::device_vector<Item> d_items = ...;
+thrust::sort(d_items.begin(), d_items.end(), compareItems);
+int w = 0, s = 0, value = 0;
+for (int i = 0; i < n; ++i) {
+  if (w + d_items[i].weight <= maxW && s + d_items[i].size <= maxS) {
+    w += d_items[i].weight;
+    s += d_items[i].size;
+    value += d_items[i].value;
+  }
+}
+</code> |
+| EKC | geneticKnapsackCuda | <code cuda>
+// Pełna ewolucja populacji na GPU
+initializePopulationKernel<<<...>>>(...);
+for (int gen = 0; gen < generations; ++gen) {
+  evaluateFitnessKernel<<<...>>>(...);
+  // Selekcja elity, krzyżowanie, mutacja na GPU
+  // thrust::sort_by_key dla elity
+  // generowanie dzieci kernelami
+}
+// Odczyt najlepszego osobnika z GPU
+</code> |
+
+==== Kody programów ====
+
+Fragmenty kodów przedstawiono w sekcjach opisujących algorytmy.
+  * Link do repozytorium projektu: [[https://github.com/Gienkooo/TwoConstraintKnapsackAlgorythms]]
+  * Kompilacja: Projekt wykorzystuje CMake (CMakeLists.txt) do konfiguracji budowania. Do kompilacji kodu z OpenMP używana jest flaga -fopenmp (dodawana automatycznie przez find_package(OpenMP)). Kompilacja odbywa się za pomocą mingw32-make w katalogu build. Zalecana jest kompilacja w trybie Release dla testów wydajnościowych (cmake .. -DCMAKE_BUILD_TYPE=Release).
+  * [[pr:Rozmiar kodu]]: Całkowity rozmiar kodu źródłowego C++ (pliki .h i .cpp) to około 15-20 KB.
+  * Zestawienie fragmentów kodów asemblerowych: Nie przeprowadzono analizy na poziomie asemblera.
+
+==== Architektura komputera ====
+
+Procesor: (Intel Core i7-12700H, 14 rdzeni, 28 wątków, Cache L1/L2/L3) \\
+Pamięć RAM: (40 GB DDR4 @ 3200 MHz) \\
+System operacyjny: Windows 11 \\
+Kompilator: mvsc \\
+
+==== Testy programów i profilowanie aplikacji ====
+
+Sprawdzanie zgodności wyników: Wyniki algorytmów równoległych (bruteKnapsackPar) są porównywane z wynikami algorytmu sekwencyjnego (bruteKnapsack) oraz optymalnego algorytmu dynamicznego (dynamicKnapsack) dla małych instancji (Stage 1 w run.py), aby zweryfikować poprawność implementacji równoległej. Dla algorytmów aproksymacyjnych (greedyKnapsackPar, geneticKnapsackPar) porównuje się ich wyniki z wersjami sekwencyjnymi oraz, tam gdzie to możliwe, z optimum.
+Analiza porównawcza wydajności: Skrypt run.py przeprowadza testy wydajnościowe w trzech etapach: \\
+  * Stage 1: Porównanie wszystkich algorytmów dla małych n. \\
+  * Stage 2: Porównanie algorytmów aproksymacyjnych dla dużych n. \\
+  * Stage 3: Analiza skalowalności algorytmów równoległych dla ustalonego n przy zmiennej liczbie wątków. \\
+Weryfikacja hazardu: Ryzyko hazardu jest minimalizowane przez: \\
+Użycie klauzuli reduction w bruteKnapsackPar. \\
+Użycie wątkowo-lokalnych generatorów liczb losowych (thread_local w get_random_engine) w geneticKnapsackPar. \\
+Staranną implementację równoległego sortowania z użyciem zadań (task) i synchronizacji (taskwait). \\
+Zachowanie sekwencyjności w krytycznych sekcjach (np. pętla wyboru w greedyKnapsackPar). \\
+Profilowanie: Nie przeprowadzono szczegółowego profilowania za pomocą narzędzi typu VTune czy Nsight Systems, analiza opiera się na pomiarach całkowitego czasu wykonania.
+
+==== Analiza narzutów czasowych i przyspieszenia obliczeń ====
+
+Narzuty czasowe w algorytmach równoległych wynikają z: \\
+Tworzenia i zarządzania wątkami przez środowisko OpenMP. \\
+Synchronizacji (np. taskwait w sortowaniu, bariery na końcu regionów równoległych, operacje redukcji). \\
+Potencjalnie nierównomiernego podziału pracy (choć schedule(dynamic) w geneticKnapsackPar ma temu przeciwdziałać). \\
+Operacji związanych z obsługą zmiennych prywatnych i współdzielonych. \\
+Przyspieszenie jest analizowane w Stage 3 (run.py) i przedstawiane na wykresach. \\
+bruteKnapsackPar: Oczekiwane dobre przyspieszenie, bliskie liniowemu dla dużych n, ograniczone liczbą rdzeni. \\
+greedyKnapsackPar: Oczekiwane ograniczone przyspieszenie z powodu sekwencyjnej części algorytmu (prawo Amdahla). \\
+geneticKnapsackPar: Oczekiwane przyspieszenie zależne od rozmiaru populacji i efektywności zrównoleglenia generowania dzieci oraz sortowania. \\
+[[pr:Skalowalność]]: Analiza skalowalności (Stage 3) pokazuje, jak przyspieszenie zmienia się wraz ze wzrostem liczby wątków. Idealnie, przyspieszenie rośnie liniowo, ale w praktyce jest ograniczone przez narzuty i sekwencyjne części kodu.
+
+==== Analiza złożoności pamięciowej ====
+
+Struktury danych: \\
+Głównie std::vector do przechowywania danych wejściowych, rozwiązań (reprezentowanych jako std::vector<int>) oraz populacji (std::vector<std::vector<int>>). W greedyKnapsackPar używana jest struktura Item. Algorytm dynamiczny używa dużej tablicy 3D dp. \\
+
+Arytmetyka zmiennoprzecinkowa: \\
+Używana do obliczania współczynnika ratio w algorytmie zachłannym oraz do porównań z crossoverRate i mutationRate w algorytmie genetycznym. \\
+
+Alokacja pamięci: \\
+Wektory są alokowane dynamicznie. W algorytmie genetycznym tworzone są nowe wektory dla kolejnych populacji. Użycie std::move pomaga unikać niepotrzebnego kopiowania.
+Algorytm dynamiczny alokuje dużą tablicę dp o rozmiarze $\mathcal{O}(n \cdot W \cdot S)$, co może być znaczącym ograniczeniem.
+Wersje równoległe mogą wymagać dodatkowej pamięci na zmienne prywatne wątków, bufory tymczasowe w równoległym sortowaniu oraz stosy zadań OpenMP. \\
+
+Rysunek struktury danych: \\
+Główną strukturą w algorytmie genetycznym jest std::vector<std::vector<int>> population, gdzie każdy wewnętrzny wektor reprezentuje chromosom (rozwiązanie). Dekompozycja polega na przetwarzaniu różnych chromosomów (lub generowaniu nowych) przez różne wątki.
+
+==== Analiza złożoności komunikacyjnej i narzutów wynikających z synchronizacji wątków ====
+
+Komunikacja: W architekturze z pamięcią współdzieloną komunikacja jest głównie niejawna poprzez dostęp do współdzielonych danych (np. odczyt populationPrev w geneticKnapsackPar).
+
+Synchronizacja:
+Niejawne bariery na końcu pętli parallel for (chyba że użyto nowait).
+Jawna synchronizacja #pragma omp taskwait w parallelMergeSortRecursive czeka na zakończenie podzadań sortowania.
+Operacja reduction w bruteKnapsackPar wymaga synchronizacji w celu połączenia wyników.
+Dostęp do wątkowo-lokalnych generatorów RNG nie wymaga synchronizacji.
+
+Granulacja: \\
+bruteKnapsackPar: Średnia/duża granulacja (każdy wątek przetwarza duży blok kombinacji). \\
+greedyKnapsackPar (sortowanie): Zmienna granulacja zadań w rekurencyjnym sortowaniu. \\
+geneticKnapsackPar (ewolucja): Średnia granulacja (każdy wątek generuje jedno lub więcej dzieci). \\
+
+==== Analiza ryzyka wystąpienia błędów związanych z wykorzystaniem wątków w programie ====
+
+Bezpieczeństwo wątkowe (Thread safety): \\
+Użycie reduction(max:...) w bruteKnapsackPar zapewnia bezpieczną agregację maksimum. \\
+Użycie thread_local dla generatorów RNG (get_random_engine) zapobiega wyścigom przy generowaniu liczb losowych w geneticKnapsackPar. \\
+Dostęp do współdzielonych struktur danych (np. odczyt populationPrev, zapis do children w geneticKnapsackPar) jest zaprojektowany tak, aby unikać wyścigów (każdy wątek zapisuje do unikalnego indeksu w children). \\
+Równoległe sortowanie jest implementowane z użyciem zadań i inplace_merge, co wymaga ostrożności, ale standardowe algorytmy i mechanizmy zadań OpenMP są generalnie bezpieczne, jeśli używane poprawnie. \\
+
+Reentrancja (Reentrancy): \\
+Funkcje używane w regionach równoległych (isValidSolution, fitness, crossover, mutate) wydają się być reentrantne, ponieważ operują głównie na swoich argumentach lub używają wątkowo-lokalnych zasobów (RNG). \\
+
+==== Ocena ryzyka wydrenowania zasobów systemu przez program ====
+
+CPU: \\
+Algorytmy równoległe (bruteKnapsackPar, geneticKnapsackPar, greedyKnapsackPar z sortowaniem) są zaprojektowane do wykorzystania wielu rdzeni i mogą obciążyć procesor w 100% (na tylu rdzeniach, ile wątków zostanie użytych). \\
+
+Pamięć: \\
+Algorytm dynamiczny jest najbardziej pamięciożerny ($\mathcal{O}(n \cdot W \cdot S)$).\\
+Algorytm genetyczny wymaga pamięci na przechowywanie populacji ($\mathcal{O}(P \cdot n)$) oraz potencjalnie tymczasowych kopii podczas ewolucji. Wersja równoległa może zużywać nieco więcej pamięci na struktury OpenMP i bufory sortowania.\\
+
+Algorytmy pełnego przeglądu i zachłanny mają stosunkowo niskie wymagania pamięciowe ($\mathcal{O}(n)$).
+Ryzyko przepełnienia stosu jest niskie, chyba że rekurencja w parallelMergeSortRecursive stanie się zbyt głęboka dla bardzo dużych n (mało prawdopodobne przy PARALLEL_SORT_THRESHOLD). \\
+
+==== Analiza właściości algorytmu równoległego w modelu formalnym (np. sieci Petriego) ====
+
+Nie przeprowadzono analizy w modelu formalnym.
+
+==== Analiza porówcza szybkości działania algorytmów: własnego i dostępnych w sieci ====
+
+Porównanie przeprowadzono tylko między zaimplementowanymi algorytmami (sekwencyjnymi i równoległymi). Nie porównywano z zewnętrznymi bibliotekami lub implementacjami online.
+
+==== Zestawienie uzyskanych wyników obliczeń ==== 
+
+Wyniki testów czasowych i analizy skalowalności są zapisywane w pliku CSV (np. results/benchmark_data_YYYYMMDD_HHMMSS.csv) i wizualizowane na wykresach generowanych przez skrypt run.py. \\
+
+n - liczba przedmiotów \\
+T - liczba wątków
+
+Wykresy Stage 1 (Małe n): \\
+ {{:user_pr25:s155958:plot_stage1_runtime_20250504_235209.png?1000|}}
+
+Wykresy Stage 2 (Duże n): \\
+ {{:user_pr25:s155958:plot_stage2_runtime_20250504_235209.png?1000|}}
+
+Wykresy Stage 3 (Skalowalność): \\
+ {{:user_pr25:s155958:plot_scalability_n28_20250504_235209.png?1000|}}
+==== Podsumowanie ====
+
+Projekt zademonstrował implementację i porównanie sekwencyjnych oraz równoległych algorytmów dla problemu plecakowego z dwoma ograniczeniami przy użyciu OpenMP. \\
+
+Pełny przegląd: \\
+Wersja równoległa (bruteKnapsackPar) wykazuje dobre przyspieszenie dla większych n, efektywnie wykorzystując dostępne rdzenie dzięki prostemu podziałowi przestrzeni poszukiwań i operacji redukcji. \\
+
+Algorytm zachłanny: \\
+Zrównoleglenie (greedyKnapsackPar) przynosi ograniczone korzyści, głównie dzięki przyspieszeniu sortowania. Sekwencyjny charakter głównej pętli wyboru przedmiotów stanowi wąskie gardło zgodnie z prawem Amdahla.
+
+== Algorytm genetyczny: ==
+Wersja równoległa (geneticKnapsackPar) oferuje potencjał znaczącego przyspieszenia, szczególnie przy dużych populacjach i liczbie generacji, dzięki zrównolegleniu inicjalizacji, sortowania i etapu ewolucji (generowania dzieci). Efektywność skalowania zależy od balansu obciążenia i narzutów OpenMP. Użycie wątkowo-lokalnych generatorów RNG jest kluczowe dla poprawności i wydajności. \\
+
+== Algorytm dynamiczny: ==
+Pozostaje efektywny dla umiarkowanych wartości ograniczeń $W$ i $S$, ale jego pseudowielomianowa złożoność i duże wymagania pamięciowe czynią go niepraktycznym dla dużych ograniczeń. Nie implementowano wersji równoległej. \\
+Analiza skalowalności (Stage 3) potwierdza teoretyczne oczekiwania: \\
+algorytm pełnego przeglądu skaluje się najlepiej, podczas gdy algorytm zachłanny najsłabiej. Algorytm genetyczny wykazuje umiarkowaną skalowalność, która może być dalej optymalizowana przez strojenie parametrów OpenMP (np. schedule) i algorytmu (np. rozmiar populacji).
+
+==== Literatura ====
+  * [[ok:problem_plecakowy]]
+  * Chandra, R., Dagum, L., Kohr, D., Maydan, D., McDonald, J., & Menon, R. (2001). //Parallel Programming in OpenMP//. Morgan Kaufmann. \\
+  * Chapman, B., Jost, G., & Van Der Pas, R. (2008). //Using OpenMP: Portable Shared Memory Parallel Programming//. MIT Press. \\
+  * "Problemy plecakowe: Algorytmy i implementacje", autorzy: Marcin Małyszko, Piotr Skowron, Wydawnictwo Politechniki Śląskiej, Gliwice 2012. \\
+  * "Problem plecakowy", autor: Jerzy Narębski, Wydawnictwo Naukowe PWN, Warszawa 2011. \\
+  * "An Analysis of Heuristics for the 0-1 Knapsack Problem with Two Side Constraints", autorzy: A. A. Hegazy, I. H. 
+  * Osman, M. El-Khodary, European Journal of Operational Research 40(3), 1989. \\
+  * "A Comparative Study of Heuristics for the 0-1 Knapsack Problem with Two Side Constraints", autorzy: S. S. Ravi, K. V. Raghavan, Operations Research Letters 17(1), 1995.
+
+==== Lab 1 ====
+
+Zad 1. \\
+Nazwa modelu: Intel(R) Core(TM) i7-8700K CPU @ 3.70GHz \\
+Rdzenie fizyczne: 6 \\
+Rdzenie logiczne: 12 \\
+CPU cache: 12288 KB
+
+
+"name":"NVIDIA GeForce GTX 1080"
+"maxThreadsPerBlock":"1024"
+"canMapHostMemory":"1"
+
+<code javascript>
+{
+"Platforms":[
+	{
+ 	"CL_PLATFORM_NAME":"NVIDIA CUDA",
+ 	"CL_PLATFORM_VENDOR":"NVIDIA Corporation",
+ 	"CL_PLATFORM_VERSION":"OpenCL 3.0 CUDA 12.2.148",
+	"Devices GPU":[
+	{
+ 		"CL_DEVICE_NAME":"NVIDIA GeForce GTX 1080",
+ 		"CL_DEVICE_MAX_COMPUTE_UNITS":"20",
+ 		"CL_DEVICE_MAX_WORK_ITEM_DIMENSIONS":"3",
+ 		"CL_DEVICE_MAX_WORK_ITEM_SIZES":[1024,1024,64],
+ 		"CL_DEVICE_MAX_WORK_GROUP_SIZE":"1024"
+	},	{
+ 		"CL_DEVICE_NAME":"NVIDIA GeForce GTX 1080",
+ 		"CL_DEVICE_MAX_COMPUTE_UNITS":"20",
+ 		"CL_DEVICE_MAX_WORK_ITEM_DIMENSIONS":"3",
+ 		"CL_DEVICE_MAX_WORK_ITEM_SIZES":[1024,1024,64],
+ 		"CL_DEVICE_MAX_WORK_GROUP_SIZE":"1024"
+	}
+	]
+	}
+]
+}
+
+</code>
+==== Lab 2 ====
+<code c>
+    /**
+    @file ompgnp.c
+    Kompilacja:
+    $ gcc ompgnp.c -o ompgnp -fopenmp
+    $ nvcc ompgnp.c -o ompgnp -Xcompiler -fopenmp
+    Uruchomienie (1<=n<=20, 0.0<=p<=1.0): ./ompgnp [n] [p]
+     
+    $ ./ompgnp 5 1.0
+    01111
+    10111
+    11011
+    11101
+    11110
+     
+    01111
+    10111
+    11011
+    11101
+    11110
+    */
+     
+    #include <omp.h>
+    #include <stdio.h>
+    #include <stdlib.h>
+    #include <time.h>
+     
+    #include <sys/types.h>
+    #include <unistd.h>
+     
+    #define random()  (float)rand()/(float)RAND_MAX
+    #define nmax 20
+     
+    typedef int t2[nmax][nmax];
+    /**< Square 2D matrix type */
+     
+    /**
+    @brief Sequential version version of G(n,p) model
+    @param n - the number of vertices
+    @param p
+    @param A
+    */
+    void gnp_sec(int n, float p, t2 A) {
+     int i,j;
+     for (i=0;i<n;i++) A[i][i] = 0;
+     
+     for (i=0;i<n-1;i++) 
+    	 for (j=i+1;j<n;j++) { A[i][j]=A[j][i]= (random() <= p); }
+    }
+     
+    /**
+    @brief Parallel version of G(n,p) model
+    @param n - the number of vertices
+    @param p
+    @param A
+    */
+    void gnp_par(int n, float p, t2 A) {
+     int i,j;
+     
+     unsigned int seed = time(NULL) * (getpid()+1);
+     unsigned int ziarno;
+     
+     #pragma omp parallel for default(none) private(i) shared(n,A)
+     for (i=0;i<n;i++) A[i][i] = 0;
+     
+     #pragma omp parallel default(none) private(i,j,ziarno) shared(seed,p,n,A)
+     {
+       ziarno = seed * (omp_get_thread_num() + 1);
+       #pragma for collapse(2)
+       for (i=0;i<n-1;i++) 
+    	 for (j=i+1;j<n;j++) { A[i][j]=A[j][i]= ((float)rand_r(&ziarno)/(float)RAND_MAX <= p); }
+     }	 
+    }
+     
+    /**
+    @brief Print matrix A
+    @param n - the number of vertices
+    @param A
+    */ 
+    void druk(int n, t2 A) {
+     int i,j;
+     for (i=0;i<n;i++) { 
+    	 for (j=0;j<n;j++) if (A[i][j]==1) printf("1"); else printf("0");
+         printf("\n");
+     }
+     printf("\n");
+    }
+     
+    /**
+    @brief Main function: 
+    * <a href="https://en.cppreference.com/w/cpp/language/main_function">main()</a> 
+    @param argc
+    @param argv
+    @return <a href="https://en.cppreference.com/w/c/program/EXIT_status">EXIT_SUCCESS or EXIT_FAILURE</a>
+    */  
+    int main(int argc, char* argv[])
+    {
+     float p = 0.5f;
+     t2 A;
+     int n = 6;
+     if (argc > 1)  n = atoi(argv[1]);
+        if (n>nmax) return EXIT_FAILURE; 
+     if (argc > 2)  p = atof(argv[2]);
+           /*
+           //Test OMP
+           #pragma omp parallel
+           printf("Test OpenMP\n");
+           */
+     // wersja sekwencyjna
+     gnp_sec(n,p,A);
+     druk(n,A);
+     
+     int i;
+     // wersja równoległa
+     #pragma omp parallel for 4
+     for(i = 0; i < 10; ++i){
+     	gnp_par(n,p,A);
+	 	druk(n,A);
+     }
+     
+     return EXIT_SUCCESS;
+    }
+
+</code>
+
+<code>
+    /**
+    @file omprandw1.c
+    Kompilacja:
+    gcc omprandw1.c -o omprandw1 -fopenmp
+    */
+     
+    #include <stdio.h>
+    #include <stdlib.h>
+    #include <string.h>
+    #include <time.h>
+    #include <omp.h>
+    #include <sys/types.h>
+    #include <unistd.h>
+     
+    /**
+     
+    */
+    void sec_gen(int alen, char * alfabet, int wlen, int rep) {
+     char * bufor = (char *)malloc((wlen+1)*sizeof(char));
+     bufor[wlen]='\0';
+     for (int r = 0; r<rep; r++) {
+      for (int i=0;i<wlen;i++) bufor[i]=alfabet[rand() % alen];
+      //printf("%s\n",bufor);
+     }	
+     free(bufor);
+    }
+
+    
+    void par_gen(int alen, char * alfabet, int wlen, int rep) {
+     	char * bufor = (char *)malloc(rep * (wlen+1)*sizeof(char));
+     	int i;
+     	#pragma omp parallel shared(alen, wlen, rep, alfabet, bufor)
+     	{
+		 	unsigned int randState = (unsigned int) clock() + omp_get_thread_num();
+		 	#pragma omp for schedule(static)
+			for (i = 0; i < rep; ++i){
+				for(int j = 0; j < wlen; ++j){
+					bufor[i * (wlen + 1) + j] = alfabet[rand_r(&randState) % alen];
+				}
+				bufor[i * (wlen + 1) + wlen]= '\n';
+			}
+			bufor[rep * (wlen + 1) + wlen] = '\0';
+    	}
+    	//printf("%s", bufor);
+	    free(bufor);
+    }
+     
+    int main(int argc, char* argv[]) {
+     
+     char * alfabet = "abc";
+     if (argc > 1)  {alfabet = argv[1];}
+     int alen = strlen(alfabet); 
+     int wlen = 4;
+     if (argc > 2)  {wlen = atoi(argv[2]);}
+     int rep = 10; 
+     if (argc > 3)  {rep = atoi(argv[3]);}
+     
+     time_t start, end, dur_par, dur_sec;
+     srand(time(NULL));
+     start = clock();
+     sec_gen(alen,alfabet,wlen,rep);
+     end = clock();
+     dur_sec = end-start;
+     printf("############\n");
+     start = clock();
+     par_gen(alen,alfabet,wlen,rep);
+     end = clock();
+     dur_par = end-start;
+     
+     printf("Dur sec %ld\n", dur_sec);
+     printf("Dur par %ld\n", dur_par);
+     // printf("ALen = %d, WLen= %d\n",alen, wlen);
+     
+     return EXIT_SUCCESS;
+    }
+
+</code>
+
+

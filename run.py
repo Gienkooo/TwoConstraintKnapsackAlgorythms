@@ -23,27 +23,27 @@ min_range_start = 20
 
 n_list_stage1 = [15, 18, 20, 22, 24, 26] 
 algos_stage1 = [
-    'bruteKnapsack',      
-    'bruteKnapsackPar',   
-    'bruteKnapsackCuda',  
-    'dynamicKnapsack',    
+    'bruteKnapsack',
+    'bruteKnapsackPar',
+    'bruteKnapsackCuda',
+    'dynamicKnapsack',
     'dynamicKnapsackCuda',
-    'greedyKnapsack',     
-    'greedyKnapsackPar',  
-    'greedyKnapsackCuda', 
-    'geneticKnapsack',    
-    'geneticKnapsackPar', 
-    'geneticKnapsackCuda' 
+    'greedyKnapsack',
+    'greedyKnapsackPar',
+    'greedyKnapsackCuda',
+    'geneticKnapsack',
+    'geneticKnapsackPar',
+    'geneticKnapsackCuda'
 ]
 
 n_list_stage2 = [50, 100, 200, 500, 1000, 2000] 
 algos_stage2 = [
-    'greedyKnapsack',     
-    'greedyKnapsackPar',  
-    'greedyKnapsackCuda', 
-    'geneticKnapsack',    
-    'geneticKnapsackPar', 
-    'geneticKnapsackCuda' 
+    'greedyKnapsack',
+    'greedyKnapsackPar',
+    'greedyKnapsackCuda',
+    'geneticKnapsack',
+    'geneticKnapsackPar',
+    'geneticKnapsackCuda'
 ]
 
 n_for_scalability = 28 
@@ -202,11 +202,27 @@ def run_single_test(program_name, test_instance_str, num_threads):
     return run_time_sec, max_value_achieved, total_weight1, total_weight2, is_valid_solution
 
 
+def get_algo_code(algo_name):
+    algo_code_map = {
+        'bruteKnapsack': 'BK',
+        'bruteKnapsackPar': 'BKP',
+        'dynamicKnapsack': 'DK',
+        'greedyKnapsack': 'GK',
+        'greedyKnapsackPar': 'GKP',
+        'geneticKnapsack': 'EK',
+        'geneticKnapsackPar': 'EKP',
+        'bruteKnapsackCuda': 'BKC',
+        'dynamicKnapsackCuda': 'DKC',
+        'greedyKnapsackCuda': 'GKC',
+        'geneticKnapsackCuda': 'EKC',
+    }
+    return algo_code_map.get(algo_name, algo_name)
+
 def run_benchmark_stage(stage_name, n_list, algorithms_to_run, current_all_raw_data):
     """Runs benchmarks for Stages 1 and 2 (varying n)."""
     print(f"\\n===== Running Benchmark Stage: {stage_name} =====")
 
-    stage_results_for_plotting = {algo: {n_val: {'avg_time': 0, 'times': [], 'avg_value': 0, 'avg_w1':0, 'avg_w2':0, 'valid_count':0} for n_val in n_list} for algo in algorithms_to_run}
+    stage_results_for_plotting = {get_algo_code(algo): {n_val: {'avg_time': 0, 'times': [], 'avg_value': 0, 'avg_w1':0, 'avg_w2':0, 'valid_count':0} for n_val in n_list} for algo in algorithms_to_run}
 
     for n_val in n_list:
         print(f"\\n--- Testing n = {n_val} ---")
@@ -214,6 +230,7 @@ def run_benchmark_stage(stage_name, n_list, algorithms_to_run, current_all_raw_d
         max_val_gen = max_range
 
         for algo_name in algorithms_to_run:
+            code = get_algo_code(algo_name)
             print(f"  Algorithm: {algo_name}")
             times_for_algo_n = []
             values_for_algo_n = []
@@ -246,7 +263,7 @@ def run_benchmark_stage(stage_name, n_list, algorithms_to_run, current_all_raw_d
                 
                 
                 current_all_raw_data.append({
-                    'stage': stage_name, 'n': n_val, 'algorithm': algo_name,
+                    'stage': stage_name, 'n': n_val, 'algorithm': code,
                     'num_threads': threads_for_run, 
                     'avg_time_sec': time_sec if time_sec is not None else 'Error/Timeout', 
                     'run_times_sec': f"[{time_sec}]" if time_sec is not None else 'Error/Timeout', 
@@ -256,16 +273,14 @@ def run_benchmark_stage(stage_name, n_list, algorithms_to_run, current_all_raw_d
 
             if times_for_algo_n:
                 avg_time = sum(times_for_algo_n) / len(times_for_algo_n)
-                stage_results_for_plotting[algo_name][n_val]['avg_time'] = avg_time
-                stage_results_for_plotting[algo_name][n_val]['times'] = times_for_algo_n
+                stage_results_for_plotting[code][n_val]['avg_time'] = avg_time
+                stage_results_for_plotting[code][n_val]['times'] = times_for_algo_n
             if values_for_algo_n:
-                 stage_results_for_plotting[algo_name][n_val]['avg_value'] = sum(values_for_algo_n) / len(values_for_algo_n)
-            if w1s_for_algo_n: stage_results_for_plotting[algo_name][n_val]['avg_w1'] = sum(w1s_for_algo_n) / len(w1s_for_algo_n)
-            if w2s_for_algo_n: stage_results_for_plotting[algo_name][n_val]['avg_w2'] = sum(w2s_for_algo_n) / len(w2s_for_algo_n)
-            stage_results_for_plotting[algo_name][n_val]['valid_count'] = valid_solutions_count
-            
-            print(f"    Avg time for {algo_name} at n={n_val}: {stage_results_for_plotting[algo_name][n_val]['avg_time']:.4f}s over {len(times_for_algo_n)} valid runs")
-
+                 stage_results_for_plotting[code][n_val]['avg_value'] = sum(values_for_algo_n) / len(values_for_algo_n)
+            if w1s_for_algo_n: stage_results_for_plotting[code][n_val]['avg_w1'] = sum(w1s_for_algo_n) / len(w1s_for_algo_n)
+            if w2s_for_algo_n: stage_results_for_plotting[code][n_val]['avg_w2'] = sum(w2s_for_algo_n) / len(w2s_for_algo_n)
+            stage_results_for_plotting[code][n_val]['valid_count'] = valid_solutions_count
+            print(f"    Avg time for {code} at n={n_val}: {stage_results_for_plotting[code][n_val]['avg_time']:.4f}s over {len(times_for_algo_n)} valid runs")
     return stage_results_for_plotting
 
 
@@ -273,7 +288,7 @@ def run_scalability_benchmark(stage_name, n_fixed, thread_list, algorithms_to_te
     """Runs scalability tests for Stage 3 (fixed n, varying threads)."""
     print(f"\\n===== Running Benchmark Stage: {stage_name} (n={n_fixed}) =====")
 
-    scalability_results_for_plotting = {algo: {thr: {'avg_time': 0, 'times': [], 'avg_value': 0, 'avg_w1':0, 'avg_w2':0, 'valid_count':0} for thr in thread_list} for algo in algorithms_to_test}
+    scalability_results_for_plotting = {get_algo_code(algo): {thr: {'avg_time': 0, 'times': [], 'avg_value': 0, 'avg_w1':0, 'avg_w2':0, 'valid_count':0} for thr in thread_list} for algo in algorithms_to_test}
     
     seq_times = {}
     for par_algo, seq_algo in seq_map.items():
@@ -295,6 +310,7 @@ def run_scalability_benchmark(stage_name, n_fixed, thread_list, algorithms_to_te
 
 
     for algo_name in algorithms_to_test:
+        code = get_algo_code(algo_name)
         print(f"\\n--- Algorithm: {algo_name} (n={n_fixed}) ---")
         for num_threads in thread_list:
             if not algo_name.endswith("Par") and num_threads > 1: 
@@ -324,7 +340,7 @@ def run_scalability_benchmark(stage_name, n_fixed, thread_list, algorithms_to_te
                 if is_valid: valid_solutions_count +=1
 
                 current_all_raw_data.append({
-                    'stage': stage_name, 'n': n_fixed, 'algorithm': algo_name,
+                    'stage': stage_name, 'n': n_fixed, 'algorithm': code,
                     'num_threads': num_threads,
                     'avg_time_sec': time_sec if time_sec is not None else 'Error/Timeout',
                     'run_times_sec': f"[{time_sec}]" if time_sec is not None else 'Error/Timeout',
@@ -334,14 +350,12 @@ def run_scalability_benchmark(stage_name, n_fixed, thread_list, algorithms_to_te
             
             if times_for_algo_threads:
                 avg_time = sum(times_for_algo_threads) / len(times_for_algo_threads)
-                scalability_results_for_plotting[algo_name][num_threads]['avg_time'] = avg_time
-                scalability_results_for_plotting[algo_name][num_threads]['times'] = times_for_algo_threads
+                scalability_results_for_plotting[code][num_threads]['avg_time'] = avg_time
+                scalability_results_for_plotting[code][num_threads]['times'] = times_for_algo_threads
             if values_for_algo_threads:
-                scalability_results_for_plotting[algo_name][num_threads]['avg_value'] = sum(values_for_algo_threads) / len(values_for_algo_threads)
-            
-            scalability_results_for_plotting[algo_name][num_threads]['valid_count'] = valid_solutions_count
-
-            print(f"    Avg time for {algo_name} with {num_threads} threads: {scalability_results_for_plotting[algo_name][num_threads]['avg_time']:.4f}s over {len(times_for_algo_threads)} valid runs")
+                scalability_results_for_plotting[code][num_threads]['avg_value'] = sum(values_for_algo_threads) / len(values_for_algo_threads)
+            scalability_results_for_plotting[code][num_threads]['valid_count'] = valid_solutions_count
+            print(f"    Avg time for {code} with {num_threads} threads: {scalability_results_for_plotting[code][num_threads]['avg_time']:.4f}s over {len(times_for_algo_threads)} valid runs")
     
     
     if hasattr(scalability_results_for_plotting, 'setdefault'): 
@@ -383,10 +397,11 @@ def get_plot_style(algo_name):
 def plot_stage1_results(data, n_values, algorithms, output_directory, time_stamp_str):
     plt.figure(figsize=(12, 8))
     for algo in algorithms:
-        if algo not in data: continue
-        avg_times = [data[algo].get(n, {}).get('avg_time', float('nan')) for n in n_values]
+        code = get_algo_code(algo)
+        if code not in data: continue
+        avg_times = [data[code].get(n, {}).get('avg_time', float('nan')) for n in n_values]
         style = get_plot_style(algo)
-        plt.plot(n_values, avg_times, label=algo, marker=style['marker'], linestyle=style['linestyle'], color=style['color'])
+        plt.plot(n_values, avg_times, label=code, marker=style['marker'], linestyle=style['linestyle'], color=style['color'])
     plt.xlabel("Number of Items (n)")
     plt.ylabel("Average Runtime (seconds)")
     plt.title("Stage 1: Runtime vs. N (Small N)")
@@ -401,10 +416,11 @@ def plot_stage1_results(data, n_values, algorithms, output_directory, time_stamp
 def plot_stage2_results(data, n_values, algorithms, output_directory, time_stamp_str):
     plt.figure(figsize=(12, 8))
     for algo in algorithms:
-        if algo not in data: continue
-        avg_times = [data[algo].get(n, {}).get('avg_time', float('nan')) for n in n_values]
+        code = get_algo_code(algo)
+        if code not in data: continue
+        avg_times = [data[code].get(n, {}).get('avg_time', float('nan')) for n in n_values]
         style = get_plot_style(algo)
-        plt.plot(n_values, avg_times, label=algo, marker=style['marker'], linestyle=style['linestyle'], color=style['color'])
+        plt.plot(n_values, avg_times, label=code, marker=style['marker'], linestyle=style['linestyle'], color=style['color'])
     plt.xlabel("Number of Items (n)")
     plt.ylabel("Average Runtime (seconds)")
     plt.title("Stage 2: Runtime vs. N (Large N)")
@@ -418,13 +434,13 @@ def plot_stage2_results(data, n_values, algorithms, output_directory, time_stamp
 
 def plot_scalability_results(data, n_value_fixed, thread_values, algorithms, seq_data_map, output_directory, time_stamp_str):
     plt.figure(figsize=(12, 8))
-    
     ax1 = plt.gca()
     for algo in algorithms: 
-        if algo not in data or not algo.endswith("Par"): continue 
-        avg_times = [data[algo].get(threads, {}).get('avg_time', float('nan')) for threads in thread_values]
+        code = get_algo_code(algo)
+        if code not in data or not algo.endswith("Par"): continue 
+        avg_times = [data[code].get(threads, {}).get('avg_time', float('nan')) for threads in thread_values]
         style = get_plot_style(algo)
-        ax1.plot(thread_values, avg_times, label=f"{algo} (abs time)", marker=style['marker'], linestyle=style['linestyle'], color=style['color'])
+        ax1.plot(thread_values, avg_times, label=f"{code} (abs time)", marker=style['marker'], linestyle=style['linestyle'], color=style['color'])
     
     ax1.set_xlabel("Number of Threads")
     ax1.set_ylabel("Average Runtime (seconds)")
@@ -440,14 +456,15 @@ def plot_scalability_results(data, n_value_fixed, thread_values, algorithms, seq
     if seq_times_lookup:
         ax2 = ax1.twinx() 
         for algo in algorithms:
-            if algo not in data or not algo.endswith("Par"): continue
-            if algo not in seq_times_lookup or seq_times_lookup[algo] == 0: continue
+            code = get_algo_code(algo)
+            if code not in data or not algo.endswith("Par"): continue
+            if code not in seq_times_lookup or seq_times_lookup[code] == 0: continue
 
-            seq_time = seq_times_lookup[algo]
-            speedup_values = [seq_time / data[algo].get(threads, {}).get('avg_time', float('inf')) if data[algo].get(threads, {}).get('avg_time') else 0 for threads in thread_values]
+            seq_time = seq_times_lookup[code]
+            speedup_values = [seq_time / data[code].get(threads, {}).get('avg_time', float('inf')) if data[code].get(threads, {}).get('avg_time') else 0 for threads in thread_values]
             style = get_plot_style(algo) 
             
-            ax2.plot(thread_values, speedup_values, label=f"{algo} (speedup)", marker=style['marker'], linestyle='--', color=style['color'], alpha=0.7)
+            ax2.plot(thread_values, speedup_values, label=f"{code} (speedup)", marker=style['marker'], linestyle='--', color=style['color'], alpha=0.7)
 
         ax2.set_ylabel("Speedup (Sequential Time / Parallel Time)")
         ax2.legend(loc='center right')
